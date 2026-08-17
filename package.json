@@ -1,0 +1,32 @@
+{
+  "name": "monitoring-service",
+  "version": "1.9.3",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "nodemon",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "db:migrate": "tsx src/database/run-migrations.ts",
+    "db:revert": "tsx src/database/revert-migration.ts",
+    "alert:demo": "tsx src/scripts/demo-alerting.ts",
+    "db:migrate:prod": "node dist/database/run-migrations.js",
+    "db:revert:prod": "node dist/database/revert-migration.js"
+  },
+  "dependencies": {
+    "dotenv": "16.5.0",
+    "express": "5.1.0",
+    "mysql2": "3.14.1",
+    "reflect-metadata": "0.2.2",
+    "typeorm": "0.3.24",
+    "node-cron": "4.6.0"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.1",
+    "@types/node": "22.15.3",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3",
+    "nodemon": "3.1.10",
+    "ts-node": "10.9.2"
+  }
+}

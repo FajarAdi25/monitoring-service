@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+npm-debug.log*
+.DS_Store
+.env.docker.local
+.env.docker.dev
+docker/certs/*
+!docker/certs/.gitkeep
