@@ -21,7 +21,11 @@ export const AppDataSource = new DataSource({
   username: env.db.username,
   password: env.db.password,
   database: env.db.database,
-  entities: [IncidentEntity, MonitoringSnapshotEntity, MonitoringCurrentStateEntity],
+  entities: [
+    IncidentEntity,
+    MonitoringSnapshotEntity,
+    MonitoringCurrentStateEntity,
+  ],
   migrations: [
     CreateIncidents1786680000000,
     CreateMonitoringSnapshots1786680100000,
@@ -31,9 +35,9 @@ export const AppDataSource = new DataSource({
     AddClosureReminderFields1786680500000,
     ReplaceCloseWithPostpone1786680600000,
     NormalizeNomadIncidentSeverity1786680700000,
-    AddIncidentUserIdentity1786680800000
+    AddIncidentUserIdentity1786680800000,
   ],
   synchronize: false,
   logging: false,
-  timezone: "Z"
+  timezone: "+07:00",
 });
