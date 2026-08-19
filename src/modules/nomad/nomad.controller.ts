@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { NomadService } from "./nomad.service";
+import { parseNomadClusterQuery } from "./nomad.validation";
 
 type NodeParams = {
   nodeId: string;
@@ -16,35 +17,43 @@ type JobParams = {
 export class NomadController {
   constructor(private readonly service: NomadService) {}
 
-  nodes = async (_req: Request, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getNodes() });
+  nodes = async (req: Request, res: Response): Promise<void> => {
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getNodes(clusterId) });
   };
 
   nodeDetail = async (req: Request<NodeParams>, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getNode(req.params.nodeId) });
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getNode(req.params.nodeId, clusterId) });
   };
 
-  allocations = async (_req: Request, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getAllocations() });
+  allocations = async (req: Request, res: Response): Promise<void> => {
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getAllocations(clusterId) });
   };
 
-  failedAllocations = async (_req: Request, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getFailedAllocations() });
+  failedAllocations = async (req: Request, res: Response): Promise<void> => {
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getFailedAllocations(clusterId) });
   };
 
   allocationDetail = async (req: Request<AllocationParams>, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getAllocation(req.params.allocationId) });
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getAllocation(req.params.allocationId, clusterId) });
   };
 
   jobSummary = async (req: Request<JobParams>, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getJobSummary(req.params.jobId) });
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getJobSummary(req.params.jobId, clusterId) });
   };
 
-  blockedEvaluations = async (_req: Request, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.getBlockedEvaluations() });
+  blockedEvaluations = async (req: Request, res: Response): Promise<void> => {
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.getBlockedEvaluations(clusterId) });
   };
 
-  manualPull = async (_req: Request, res: Response): Promise<void> => {
-    res.json({ success: true, data: await this.service.pullOnce() });
+  manualPull = async (req: Request, res: Response): Promise<void> => {
+    const clusterId = parseNomadClusterQuery(req.query as Record<string, unknown>);
+    res.json({ success: true, data: await this.service.pullOnce(clusterId) });
   };
 }
