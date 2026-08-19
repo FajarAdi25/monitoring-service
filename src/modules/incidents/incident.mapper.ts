@@ -1,3 +1,5 @@
+import type { ClusterMetadata } from "../clusters/cluster.types";
+import { serializeClusterId } from "../clusters/cluster.types";
 import type { User } from "../../common/types/user";
 import { IncidentEntity } from "./incident.entity";
 import { IncidentStatus } from "./incident.enums";
@@ -6,6 +8,16 @@ function serializeId(id: string | null): string | number | null {
   if (id === null) return null;
   const numeric = Number(id);
   return Number.isSafeInteger(numeric) ? numeric : id;
+}
+
+function clusterFields(metadata: ClusterMetadata) {
+  return {
+    clusterId: serializeClusterId(metadata.clusterId),
+    clusterName: metadata.clusterName,
+    site: metadata.site,
+    appName: metadata.appName,
+    env: metadata.env
+  };
 }
 
 function userRef(
@@ -29,10 +41,10 @@ function isPostponed(entity: IncidentEntity, now = new Date()): boolean {
     && entity.postponeUntil.getTime() > now.getTime();
 }
 
-export function mapIncidentListItem(entity: IncidentEntity) {
+export function mapIncidentListItem(entity: IncidentEntity, metadata: ClusterMetadata) {
   return {
     id: entity.publicId,
-    clusterId: serializeId(entity.clusterId),
+    ...clusterFields(metadata),
     source: entity.source,
     type: entity.type,
     severity: entity.severity,
@@ -52,9 +64,10 @@ export function mapIncidentListItem(entity: IncidentEntity) {
   };
 }
 
-export function mapIncidentDetail(entity: IncidentEntity, currentUser?: User) {
+export function mapIncidentDetail(entity: IncidentEntity, metadata: ClusterMetadata, currentUser?: User) {
   return {
     id: entity.publicId,
+    ...clusterFields(metadata),
     source: entity.source,
     type: entity.type,
     severity: entity.severity,

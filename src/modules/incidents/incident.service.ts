@@ -1,4 +1,5 @@
 import type { User } from "../../common/types/user";
+import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { AppError } from "../../common/errors/app-error";
 import { IncidentEntity } from "./incident.entity";
 import { IncidentRepository } from "./incident.repository";
@@ -13,12 +14,20 @@ import {
 import { parsePostponeBody } from "./incident.validation";
 
 export class IncidentService {
-  constructor(private readonly repository: IncidentRepository) {}
+  constructor(
+    private readonly repository: IncidentRepository,
+    private readonly clusters: ClusterRepositoryPort
+  ) {}
 
   async list(filters: IncidentListFilters) {
     const { items, total } = await this.repository.list(filters);
+    const metadataById = await this.clusters.findMetadataByIds(items.map(item => item.clusterId));
     return {
-      items: items.map(mapIncidentListItem),
+      items: items.map(item => {
+        const metadata = metadataById.get(item.clusterId);
+        if (!metadata) throw new Error(`Cluster metadata missing for cluster ${item.clusterId}.`);
+        return mapIncidentListItem(item, metadata);
+      }),
       pagination: {
         page: filters.page,
         limit: filters.limit,
@@ -29,7 +38,9 @@ export class IncidentService {
 
   async detail(publicId: string, user?: User) {
     const incident = await this.getOrFail(publicId);
-    return mapIncidentDetail(incident, user);
+    const metadata = await this.clusters.findMetadataById(incident.clusterId);
+    if (!metadata) throw new Error(`Cluster metadata missing for cluster ${incident.clusterId}.`);
+    return mapIncidentDetail(incident, metadata, user);
   }
 
   async acknowledge(publicId: string, user: User, note?: string) {

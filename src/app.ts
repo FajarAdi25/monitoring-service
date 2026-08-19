@@ -35,7 +35,7 @@ export function createApp(dependencies: AppDependencies) {
 
   const clusterRepository = new ClusterRepository(AppDataSource);
   const incidentRepository = new IncidentRepository(AppDataSource);
-  const incidentService = new IncidentService(incidentRepository);
+  const incidentService = new IncidentService(incidentRepository, clusterRepository);
   const incidentController = new IncidentController(incidentService);
 
   const snapshotRepository = new MonitoringSnapshotRepository(AppDataSource);
@@ -46,7 +46,7 @@ export function createApp(dependencies: AppDependencies) {
   const currentStateService = new MonitoringCurrentStateService(currentStateRepository, clusterRepository);
   const currentStateController = new MonitoringCurrentStateController(currentStateService);
 
-  const dashboardService = new DashboardService(incidentRepository, currentStateRepository);
+  const dashboardService = new DashboardService(incidentRepository, currentStateRepository, clusterRepository);
   const dashboardController = new DashboardController(dashboardService);
 
   const nomadController = new NomadController(dependencies.nomadService);

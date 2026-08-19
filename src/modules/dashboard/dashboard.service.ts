@@ -1,3 +1,4 @@
+import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { IncidentSeverity } from "../incidents/incident.enums";
 import { mapIncidentListItem } from "../incidents/incident.mapper";
 import { IncidentRepository } from "../incidents/incident.repository";
@@ -18,7 +19,8 @@ const NOMAD_INCIDENT_TYPES = [
 export class DashboardService {
   constructor(
     private readonly incidents: IncidentRepository,
-    private readonly currentStates: MonitoringCurrentStateRepository
+    private readonly currentStates: MonitoringCurrentStateRepository,
+    private readonly clusters: ClusterRepositoryPort
   ) {}
 
   async overview(query: Record<string, unknown>) {
@@ -82,15 +84,25 @@ export class DashboardService {
       now: new Date()
     });
 
-    return items.map(mapIncidentListItem);
+    const metadataById = await this.clusters.findMetadataByIds(items.map(item => item.clusterId));
+    return items.map(item => {
+      const metadata = metadataById.get(item.clusterId);
+      if (!metadata) throw new Error(`Cluster metadata missing for cluster ${item.clusterId}.`);
+      return mapIncidentListItem(item, metadata);
+    });
   }
 
   async resolved(query: Record<string, unknown>) {
     const filters = parseDashboardResolvedQuery(query);
     const { items, total } = await this.incidents.resolvedHistory(filters);
 
+    const metadataById = await this.clusters.findMetadataByIds(items.map(item => item.clusterId));
     return {
-      items: items.map(mapIncidentListItem),
+      items: items.map(item => {
+        const metadata = metadataById.get(item.clusterId);
+        if (!metadata) throw new Error(`Cluster metadata missing for cluster ${item.clusterId}.`);
+        return mapIncidentListItem(item, metadata);
+      }),
       pagination: {
         page: filters.page,
         limit: filters.limit,

@@ -1,4 +1,5 @@
 import type { DataSource } from "typeorm";
+import { ClusterRepository } from "../clusters/cluster.repository";
 import { IncidentRepository } from "../incidents/incident.repository";
 import { IncidentService } from "../incidents/incident.service";
 import { ConsoleAlertNotifier, HttpWebhookAlertNotifier } from "./alerting.notifier";
@@ -20,8 +21,9 @@ export function createAlertingModule(
   dataSource: DataSource,
   config: AlertingModuleConfig
 ): AlertingModule {
+  const clusterRepository = new ClusterRepository(dataSource);
   const incidentRepository = new IncidentRepository(dataSource);
-  const incidentService = new IncidentService(incidentRepository);
+  const incidentService = new IncidentService(incidentRepository, clusterRepository);
   const notifier = config.webhookUrl
     ? new HttpWebhookAlertNotifier(config.webhookUrl)
     : new ConsoleAlertNotifier();
