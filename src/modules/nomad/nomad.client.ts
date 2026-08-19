@@ -12,6 +12,10 @@ export interface NomadClientConfig {
   tlsCaFile?: string;
 }
 
+interface NomadGetOptions {
+  notFoundAsResource?: boolean;
+}
+
 export class NomadClient {
   private readonly tlsCa?: Buffer;
 
@@ -31,7 +35,7 @@ export class NomadClient {
   }
 
   getNode(nodeId: string): Promise<NomadNode> {
-    return this.get<NomadNode>(`/v1/node/${encodeURIComponent(nodeId)}`);
+    return this.get<NomadNode>(`/v1/node/${encodeURIComponent(nodeId)}`, undefined, { notFoundAsResource: true });
   }
 
   getAllocations(): Promise<NomadAllocation[]> {
@@ -50,11 +54,11 @@ export class NomadClient {
   }
 
   getAllocation(allocationId: string): Promise<NomadAllocation> {
-    return this.get<NomadAllocation>(`/v1/allocation/${encodeURIComponent(allocationId)}`);
+    return this.get<NomadAllocation>(`/v1/allocation/${encodeURIComponent(allocationId)}`, undefined, { notFoundAsResource: true });
   }
 
   getJobSummary(jobId: string): Promise<Record<string, unknown>> {
-    return this.get<Record<string, unknown>>(`/v1/job/${encodeURIComponent(jobId)}/summary`);
+    return this.get<Record<string, unknown>>(`/v1/job/${encodeURIComponent(jobId)}/summary`, undefined, { notFoundAsResource: true });
   }
 
   getBlockedEvaluations(): Promise<NomadEvaluation[]> {
@@ -63,7 +67,11 @@ export class NomadClient {
     });
   }
 
-  private async get<T>(path: string, query?: Record<string, string>): Promise<T> {
+  private async get<T>(
+    path: string,
+    query?: Record<string, string>,
+    options: NomadGetOptions = {}
+  ): Promise<T> {
     const url = this.buildUrl(path, query);
     const headers: Record<string, string> = {
       accept: "application/json",
@@ -87,7 +95,7 @@ export class NomadClient {
       }
 
       const onResponse = (response: IncomingMessage): void => {
-        void this.readResponse<T>(url, response).then(
+        void this.readResponse<T>(url, response, options).then(
           resolve,
           error => {
             if (error instanceof AppError) {
@@ -140,7 +148,7 @@ export class NomadClient {
       throw new AppError(
         500,
         "NOMAD_CONFIG_INVALID",
-        "NOMAD_BASE_URL must be a valid URL including http:// or https://."
+        "Nomad cluster URL must be a valid URL including http:// or https://."
       );
     }
 
@@ -148,7 +156,7 @@ export class NomadClient {
       throw new AppError(
         500,
         "NOMAD_CONFIG_INVALID",
-        `Unsupported NOMAD_BASE_URL protocol: ${url.protocol}`
+        `Unsupported Nomad cluster URL protocol: ${url.protocol}`
       );
     }
 
@@ -158,7 +166,11 @@ export class NomadClient {
     return url;
   }
 
-  private async readResponse<T>(url: URL, response: IncomingMessage): Promise<T> {
+  private async readResponse<T>(
+    url: URL,
+    response: IncomingMessage,
+    options: NomadGetOptions
+  ): Promise<T> {
     const chunks: Buffer[] = [];
     for await (const chunk of response) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -166,6 +178,14 @@ export class NomadClient {
 
     const body = Buffer.concat(chunks).toString("utf8");
     const status = response.statusCode ?? 0;
+    if (status === 404 && options.notFoundAsResource) {
+      throw new AppError(
+        404,
+        "NOMAD_RESOURCE_NOT_FOUND",
+        `Nomad resource was not found for GET ${url.pathname}${url.search}.`
+      );
+    }
+
     if (status < 200 || status >= 300) {
       throw new AppError(
         502,

@@ -1,3 +1,5 @@
+import type { ClusterEntity } from "../clusters/cluster.entity";
+
 export interface NomadDriverState {
   Attributes?: Record<string, string> | null;
   Detected?: boolean;
@@ -53,3 +55,15 @@ export interface NomadPullResult {
   failuresProcessed: number;
   recoveriesProcessed: number;
 }
+
+export interface NomadClientPort {
+  getNodes(): Promise<NomadNode[]>;
+  getNode(nodeId: string): Promise<NomadNode>;
+  getAllocations(): Promise<NomadAllocation[]>;
+  getFailedAllocations(): Promise<NomadAllocation[]>;
+  getAllocation(allocationId: string): Promise<NomadAllocation>;
+  getJobSummary(jobId: string): Promise<Record<string, unknown>>;
+  getBlockedEvaluations(): Promise<NomadEvaluation[]>;
+}
+
+export type NomadClientFactory = (cluster: ClusterEntity) => NomadClientPort;
