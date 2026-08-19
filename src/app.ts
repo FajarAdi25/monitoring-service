@@ -3,6 +3,7 @@ import { AppDataSource } from "./database/data-source";
 import { userMiddleware } from "./common/middleware/user.middleware";
 import { errorMiddleware } from "./common/middleware/error.middleware";
 import { notFoundMiddleware } from "./common/middleware/not-found.middleware";
+import { ClusterRepository } from "./modules/clusters/cluster.repository";
 import { IncidentRepository } from "./modules/incidents/incident.repository";
 import { IncidentService } from "./modules/incidents/incident.service";
 import { IncidentController } from "./modules/incidents/incident.controller";
@@ -32,16 +33,17 @@ export function createApp(dependencies: AppDependencies) {
   app.use(express.json({ limit: "2mb" }));
   app.use(userMiddleware);
 
+  const clusterRepository = new ClusterRepository(AppDataSource);
   const incidentRepository = new IncidentRepository(AppDataSource);
   const incidentService = new IncidentService(incidentRepository);
   const incidentController = new IncidentController(incidentService);
 
   const snapshotRepository = new MonitoringSnapshotRepository(AppDataSource);
-  const snapshotService = new MonitoringSnapshotService(snapshotRepository);
+  const snapshotService = new MonitoringSnapshotService(snapshotRepository, clusterRepository);
   const snapshotController = new MonitoringSnapshotController(snapshotService);
 
   const currentStateRepository = new MonitoringCurrentStateRepository(AppDataSource);
-  const currentStateService = new MonitoringCurrentStateService(currentStateRepository);
+  const currentStateService = new MonitoringCurrentStateService(currentStateRepository, clusterRepository);
   const currentStateController = new MonitoringCurrentStateController(currentStateService);
 
   const dashboardService = new DashboardService(incidentRepository, currentStateRepository);

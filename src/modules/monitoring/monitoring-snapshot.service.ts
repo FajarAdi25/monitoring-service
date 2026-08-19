@@ -1,4 +1,5 @@
 import { AppError } from "../../common/errors/app-error";
+import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { MonitoringSnapshotRepository } from "./monitoring-snapshot.repository";
 
 function stringQuery(value: unknown): string | undefined {
@@ -7,7 +8,10 @@ function stringQuery(value: unknown): string | undefined {
 }
 
 export class MonitoringSnapshotService {
-  constructor(private readonly repository: MonitoringSnapshotRepository) {}
+  constructor(
+    private readonly repository: MonitoringSnapshotRepository,
+    private readonly clusters: ClusterRepositoryPort
+  ) {}
 
   async list(query: Record<string, unknown>) {
     const rawLimit = stringQuery(query.limit);
@@ -24,16 +28,26 @@ export class MonitoringSnapshotService {
       limit
     });
 
-    return items.map(item => ({
-      id: item.id,
-      clusterId: item.clusterId,
-      source: item.source,
-      resourceType: item.resourceType,
-      resourceKey: item.resourceKey,
-      resourceName: item.resourceName,
-      state: item.state,
-      payload: item.payloadJson,
-      observedAt: item.observedAt.toISOString()
-    }));
+    const metadataById = await this.clusters.findMetadataByIds(items.map(item => item.clusterId));
+
+    return items.map(item => {
+      const metadata = metadataById.get(item.clusterId);
+      if (!metadata) throw new Error(`Cluster metadata missing for cluster ${item.clusterId}.`);
+      return {
+        id: item.id,
+        clusterId: item.clusterId,
+        clusterName: metadata.clusterName,
+        site: metadata.site,
+        appName: metadata.appName,
+        env: metadata.env,
+        source: item.source,
+        resourceType: item.resourceType,
+        resourceKey: item.resourceKey,
+        resourceName: item.resourceName,
+        state: item.state,
+        payload: item.payloadJson,
+        observedAt: item.observedAt.toISOString()
+      };
+    });
   }
 }
