@@ -1,112 +1,233 @@
 import { AppError } from "../../common/errors/app-error";
 import { AlertingService } from "../alerting/alerting.service";
+import type { ClusterEntity } from "../clusters/cluster.entity";
+import type { ClusterRepositoryPort } from "../clusters/cluster.types";
+import { serializeClusterId, toClusterMetadata } from "../clusters/cluster.types";
 import { MonitoringObservationService } from "../monitoring/monitoring-observation.service";
-import { NomadClient } from "./nomad.client";
 import { getNomadAllocationLogicalIdentity } from "./nomad-allocation-key";
 import { createNomadFingerprint } from "./nomad.fingerprint";
 import { NOMAD_INCIDENT_SEVERITY } from "./nomad.severity";
-import type { NomadAllocation, NomadEvaluation, NomadNode, NomadPullResult } from "./nomad.types";
-
-export interface NomadMonitoringConfig {
-  clusterId: string;
-}
+import type {
+  NomadAllocation,
+  NomadClientFactory,
+  NomadClusterApiMetadata,
+  NomadClusterItem,
+  NomadEvaluation,
+  NomadNode,
+  NomadPullOutcome,
+  NomadPullResult,
+  ScopedNomadPullResult
+} from "./nomad.types";
 
 export class NomadService {
   private pulling = false;
 
   constructor(
-    private readonly client: NomadClient,
+    private readonly clusters: ClusterRepositoryPort,
+    private readonly clientFactory: NomadClientFactory,
     private readonly monitoring: MonitoringObservationService,
-    private readonly alerting: AlertingService,
-    private readonly config: NomadMonitoringConfig
+    private readonly alerting: AlertingService
   ) {}
 
-  getNodes(): Promise<NomadNode[]> {
-    return this.client.getNodes();
+  async getNodes(clusterId?: string): Promise<Array<NomadClusterItem<NomadNode>>> {
+    return this.listAcrossClusters(clusterId, client => client.getNodes());
   }
 
-  getNode(nodeId: string): Promise<NomadNode> {
-    return this.client.getNode(nodeId);
+  async getNode(nodeId: string, clusterId?: string): Promise<NomadClusterItem<NomadNode>> {
+    return this.detailAcrossClusters(clusterId, client => client.getNode(nodeId));
   }
 
-  getAllocations(): Promise<NomadAllocation[]> {
-    return this.client.getAllocations();
+  async getAllocations(clusterId?: string): Promise<Array<NomadClusterItem<NomadAllocation>>> {
+    return this.listAcrossClusters(clusterId, client => client.getAllocations());
   }
 
-  getFailedAllocations(): Promise<NomadAllocation[]> {
-    return this.client.getFailedAllocations();
+  async getFailedAllocations(clusterId?: string): Promise<Array<NomadClusterItem<NomadAllocation>>> {
+    return this.listAcrossClusters(clusterId, client => client.getFailedAllocations());
   }
 
-  getAllocation(allocationId: string): Promise<NomadAllocation> {
-    return this.client.getAllocation(allocationId);
+  async getAllocation(allocationId: string, clusterId?: string): Promise<NomadClusterItem<NomadAllocation>> {
+    return this.detailAcrossClusters(clusterId, client => client.getAllocation(allocationId));
   }
 
-  getJobSummary(jobId: string): Promise<Record<string, unknown>> {
-    return this.client.getJobSummary(jobId);
+  async getJobSummary(jobId: string, clusterId?: string): Promise<NomadClusterItem<Record<string, unknown>>> {
+    return this.detailAcrossClusters(clusterId, client => client.getJobSummary(jobId));
   }
 
-  getBlockedEvaluations(): Promise<NomadEvaluation[]> {
-    return this.client.getBlockedEvaluations();
+  async getBlockedEvaluations(clusterId?: string): Promise<Array<NomadClusterItem<NomadEvaluation>>> {
+    return this.listAcrossClusters(clusterId, client => client.getBlockedEvaluations());
   }
 
-  async pullOnce(now = new Date()): Promise<NomadPullResult> {
+  async pullOnce(
+    clusterId?: string,
+    now = new Date()
+  ): Promise<ScopedNomadPullResult | NomadPullOutcome[]> {
     if (this.pulling) {
       throw new AppError(409, "NOMAD_PULL_IN_PROGRESS", "Nomad pull is already running.");
     }
 
     this.pulling = true;
-    const startedAt = now;
-    let snapshotChanges = 0;
-    let failuresProcessed = 0;
-    let recoveriesProcessed = 0;
-
     try {
-      const [nodes, allocations, blockedEvaluations] = await Promise.all([
-        this.client.getNodes(),
-        this.client.getAllocations(),
-        this.client.getBlockedEvaluations()
-      ]);
-
-      for (const node of nodes) {
-        const result = await this.processNode(node, now);
-        snapshotChanges += result.snapshotChanges;
-        failuresProcessed += result.failuresProcessed;
-        recoveriesProcessed += result.recoveriesProcessed;
+      const selected = await this.selectedClusters(clusterId);
+      if (clusterId) {
+        const cluster = selected[0];
+        const result = await this.pullCluster(cluster, now);
+        return { ...this.apiMetadata(cluster), ...result };
       }
 
-      const allocationResult = await this.processAllocations(allocations, now);
-      snapshotChanges += allocationResult.snapshotChanges;
-      failuresProcessed += allocationResult.failuresProcessed;
-      recoveriesProcessed += allocationResult.recoveriesProcessed;
-
-      const evaluationResult = await this.processBlockedEvaluations(blockedEvaluations, now);
-      snapshotChanges += evaluationResult.snapshotChanges;
-      failuresProcessed += evaluationResult.failuresProcessed;
-      recoveriesProcessed += evaluationResult.recoveriesProcessed;
-
-      return {
-        startedAt: startedAt.toISOString(),
-        finishedAt: new Date().toISOString(),
-        nodes: nodes.length,
-        allocations: allocations.length,
-        blockedEvaluations: blockedEvaluations.length,
-        snapshotChanges,
-        failuresProcessed,
-        recoveriesProcessed
-      };
+      const outcomes: NomadPullOutcome[] = [];
+      for (const cluster of selected) {
+        try {
+          outcomes.push({
+            ...this.apiMetadata(cluster),
+            success: true,
+            result: await this.pullCluster(cluster, now)
+          });
+        } catch (error) {
+          outcomes.push({
+            ...this.apiMetadata(cluster),
+            success: false,
+            error: this.pullError(error)
+          });
+        }
+      }
+      return outcomes;
     } finally {
       this.pulling = false;
     }
   }
 
-  private async processNode(node: NomadNode, observedAt: Date) {
+  private async selectedClusters(clusterId?: string): Promise<ClusterEntity[]> {
+    if (!clusterId) return this.clusters.findAll();
+    const cluster = await this.clusters.findById(clusterId);
+    if (!cluster) {
+      throw new AppError(404, "CLUSTER_NOT_FOUND", `Cluster ${clusterId} was not found.`);
+    }
+    return [cluster];
+  }
+
+  private apiMetadata(cluster: ClusterEntity): NomadClusterApiMetadata {
+    const metadata = toClusterMetadata(cluster);
+    return {
+      clusterId: serializeClusterId(metadata.clusterId),
+      clusterName: metadata.clusterName,
+      site: metadata.site,
+      appName: metadata.appName,
+      env: metadata.env
+    };
+  }
+
+  private enrich<T extends Record<string, unknown>>(value: T, cluster: ClusterEntity): NomadClusterItem<T> {
+    return {
+      ...value,
+      ...this.apiMetadata(cluster)
+    };
+  }
+
+  private async listAcrossClusters<T extends Record<string, unknown>>(
+    clusterId: string | undefined,
+    read: (client: ReturnType<NomadClientFactory>) => Promise<T[]>
+  ): Promise<Array<NomadClusterItem<T>>> {
+    const selected = await this.selectedClusters(clusterId);
+    const resultSets = await Promise.all(selected.map(async cluster => {
+      const items = await read(this.clientFactory(cluster));
+      return items.map(item => this.enrich(item, cluster));
+    }));
+    return resultSets.flat();
+  }
+
+  private async detailAcrossClusters<T extends Record<string, unknown>>(
+    clusterId: string | undefined,
+    read: (client: ReturnType<NomadClientFactory>) => Promise<T>
+  ): Promise<NomadClusterItem<T>> {
+    const selected = await this.selectedClusters(clusterId);
+    if (clusterId) {
+      const cluster = selected[0];
+      return this.enrich(await read(this.clientFactory(cluster)), cluster);
+    }
+
+    const matches: Array<NomadClusterItem<T>> = [];
+    for (const cluster of selected) {
+      try {
+        matches.push(this.enrich(await read(this.clientFactory(cluster)), cluster));
+      } catch (error) {
+        if (error instanceof AppError && error.code === "NOMAD_RESOURCE_NOT_FOUND") continue;
+        throw error;
+      }
+    }
+
+    if (matches.length === 0) {
+      throw new AppError(404, "NOMAD_RESOURCE_NOT_FOUND", "Nomad resource was not found.");
+    }
+    if (matches.length > 1) {
+      throw new AppError(
+        409,
+        "NOMAD_RESOURCE_CLUSTER_AMBIGUOUS",
+        "Nomad resource exists in more than one cluster; specify the cluster query parameter."
+      );
+    }
+    return matches[0];
+  }
+
+  private async pullCluster(cluster: ClusterEntity, now: Date): Promise<NomadPullResult> {
+    const client = this.clientFactory(cluster);
+    const startedAt = now;
+    let snapshotChanges = 0;
+    let failuresProcessed = 0;
+    let recoveriesProcessed = 0;
+
+    const [nodes, allocations, blockedEvaluations] = await Promise.all([
+      client.getNodes(),
+      client.getAllocations(),
+      client.getBlockedEvaluations()
+    ]);
+
+    for (const node of nodes) {
+      const result = await this.processNode(cluster.clusterId, node, now);
+      snapshotChanges += result.snapshotChanges;
+      failuresProcessed += result.failuresProcessed;
+      recoveriesProcessed += result.recoveriesProcessed;
+    }
+
+    const allocationResult = await this.processAllocations(cluster.clusterId, allocations, now);
+    snapshotChanges += allocationResult.snapshotChanges;
+    failuresProcessed += allocationResult.failuresProcessed;
+    recoveriesProcessed += allocationResult.recoveriesProcessed;
+
+    const evaluationResult = await this.processBlockedEvaluations(cluster.clusterId, blockedEvaluations, now);
+    snapshotChanges += evaluationResult.snapshotChanges;
+    failuresProcessed += evaluationResult.failuresProcessed;
+    recoveriesProcessed += evaluationResult.recoveriesProcessed;
+
+    return {
+      startedAt: startedAt.toISOString(),
+      finishedAt: new Date().toISOString(),
+      nodes: nodes.length,
+      allocations: allocations.length,
+      blockedEvaluations: blockedEvaluations.length,
+      snapshotChanges,
+      failuresProcessed,
+      recoveriesProcessed
+    };
+  }
+
+  private pullError(error: unknown): { code: string; message: string } {
+    if (error instanceof AppError) {
+      return { code: error.code, message: error.message };
+    }
+    return {
+      code: "INTERNAL_SERVER_ERROR",
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
+
+  private async processNode(clusterId: string, node: NomadNode, observedAt: Date) {
     let snapshotChanges = 0;
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
 
     const nodeState = String(node.Status ?? "").toUpperCase();
     const nodeSnapshot = await this.monitoring.record({
-      clusterId: this.config.clusterId,
+      clusterId: clusterId,
       source: "NOMAD",
       resourceType: "NODE",
       resourceKey: node.ID,
@@ -118,7 +239,7 @@ export class NomadService {
     if (nodeSnapshot.changed) snapshotChanges += 1;
 
     const nodeFingerprint = createNomadFingerprint({
-      clusterId: this.config.clusterId,
+      clusterId: clusterId,
       type: "NODE_DOWN",
       resourceType: "NODE",
       resourceKey: node.ID
@@ -126,7 +247,7 @@ export class NomadService {
 
     if (nodeState === "DOWN") {
       await this.alerting.processFailure({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         source: "NOMAD",
         type: "NODE_DOWN",
         severity: NOMAD_INCIDENT_SEVERITY.NODE_DOWN,
@@ -150,7 +271,7 @@ export class NomadService {
       const driverState = !detected ? "NOT_DETECTED" : healthy ? "HEALTHY" : "UNHEALTHY";
       const resourceKey = `${node.ID}:${driverName}`;
       const driverSnapshot = await this.monitoring.record({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         source: "NOMAD",
         resourceType: "DRIVER",
         resourceKey,
@@ -162,7 +283,7 @@ export class NomadService {
       if (driverSnapshot.changed) snapshotChanges += 1;
 
       const fingerprint = createNomadFingerprint({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         type: "DRIVER_UNHEALTHY",
         resourceType: "DRIVER",
         resourceKey
@@ -170,7 +291,7 @@ export class NomadService {
 
       if (detected && !healthy) {
         await this.alerting.processFailure({
-          clusterId: this.config.clusterId,
+          clusterId: clusterId,
           source: "NOMAD",
           type: "DRIVER_UNHEALTHY",
           severity: NOMAD_INCIDENT_SEVERITY.DRIVER_UNHEALTHY,
@@ -197,7 +318,7 @@ export class NomadService {
     return { snapshotChanges, failuresProcessed, recoveriesProcessed };
   }
 
-  private async processAllocations(allocations: NomadAllocation[], observedAt: Date) {
+  private async processAllocations(clusterId: string, allocations: NomadAllocation[], observedAt: Date) {
     let snapshotChanges = 0;
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
@@ -212,7 +333,7 @@ export class NomadService {
     }
 
     for (const group of groups.values()) {
-      const result = await this.processAllocationGroup(group, observedAt);
+      const result = await this.processAllocationGroup(clusterId, group, observedAt);
       snapshotChanges += result.snapshotChanges;
       failuresProcessed += result.failuresProcessed;
       recoveriesProcessed += result.recoveriesProcessed;
@@ -221,7 +342,7 @@ export class NomadService {
     return { snapshotChanges, failuresProcessed, recoveriesProcessed };
   }
 
-  private async processAllocationGroup(allocations: NomadAllocation[], observedAt: Date) {
+  private async processAllocationGroup(clusterId: string, allocations: NomadAllocation[], observedAt: Date) {
     const representative = this.selectAllocationRepresentative(allocations);
     const identity = getNomadAllocationLogicalIdentity(representative);
     const runningAllocation = this.selectMostRecentAllocation(
@@ -257,7 +378,7 @@ export class NomadService {
     };
 
     const snapshot = await this.monitoring.record({
-      clusterId: this.config.clusterId,
+      clusterId: clusterId,
       source: "NOMAD",
       resourceType: "ALLOCATION",
       resourceKey: identity.resourceKey,
@@ -268,14 +389,14 @@ export class NomadService {
     });
 
     const fingerprint = createNomadFingerprint({
-      clusterId: this.config.clusterId,
+      clusterId: clusterId,
       type: "ALLOCATION_FAILED",
       resourceType: "ALLOCATION",
       resourceKey: identity.resourceKey
     });
 
     const legacyFingerprints = allocations.map(allocation => createNomadFingerprint({
-      clusterId: this.config.clusterId,
+      clusterId: clusterId,
       type: "ALLOCATION_FAILED",
       resourceType: "ALLOCATION",
       resourceKey: allocation.ID
@@ -303,7 +424,7 @@ export class NomadService {
 
     if (failedAllocation) {
       await this.alerting.processFailure({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         source: "NOMAD",
         type: "ALLOCATION_FAILED",
         severity: NOMAD_INCIDENT_SEVERITY.ALLOCATION_FAILED,
@@ -353,7 +474,7 @@ export class NomadService {
     return String(allocation.ClientStatus ?? "").toUpperCase();
   }
 
-  private async processBlockedEvaluations(evaluations: NomadEvaluation[], observedAt: Date) {
+  private async processBlockedEvaluations(clusterId: string, evaluations: NomadEvaluation[], observedAt: Date) {
     let snapshotChanges = 0;
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
@@ -363,7 +484,7 @@ export class NomadService {
       if (!evaluation.ID) continue;
       currentBlockedKeys.add(evaluation.ID);
       const snapshot = await this.monitoring.record({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         source: "NOMAD",
         resourceType: "EVALUATION",
         resourceKey: evaluation.ID,
@@ -375,14 +496,14 @@ export class NomadService {
       if (snapshot.changed) snapshotChanges += 1;
 
       const fingerprint = createNomadFingerprint({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         type: "EVALUATION_BLOCKED",
         resourceType: "EVALUATION",
         resourceKey: evaluation.ID
       });
 
       await this.alerting.processFailure({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         source: "NOMAD",
         type: "EVALUATION_BLOCKED",
         severity: NOMAD_INCIDENT_SEVERITY.EVALUATION_BLOCKED,
@@ -398,7 +519,7 @@ export class NomadService {
     }
 
     const latestStates = await this.monitoring.latestStates({
-      clusterId: this.config.clusterId,
+      clusterId: clusterId,
       source: "NOMAD",
       resourceType: "EVALUATION"
     });
@@ -407,14 +528,14 @@ export class NomadService {
       if (latest.state !== "BLOCKED" || currentBlockedKeys.has(latest.resourceKey)) continue;
 
       const fingerprint = createNomadFingerprint({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         type: "EVALUATION_BLOCKED",
         resourceType: "EVALUATION",
         resourceKey: latest.resourceKey
       });
       const resolved = await this.alerting.processRecovery({ fingerprint, detectedAt: observedAt });
       const recoverySnapshot = await this.monitoring.record({
-        clusterId: this.config.clusterId,
+        clusterId: clusterId,
         source: "NOMAD",
         resourceType: "EVALUATION",
         resourceKey: latest.resourceKey,

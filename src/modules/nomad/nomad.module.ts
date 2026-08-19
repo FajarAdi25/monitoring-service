@@ -1,13 +1,13 @@
 import type { DataSource } from "typeorm";
 import type { AlertingService } from "../alerting/alerting.service";
+import { ClusterRepository } from "../clusters/cluster.repository";
 import { MonitoringObservationService } from "../monitoring/monitoring-observation.service";
 import { NomadClient } from "./nomad.client";
-import { NomadService, type NomadMonitoringConfig } from "./nomad.service";
+import { NomadService } from "./nomad.service";
+import type { NomadClientFactory } from "./nomad.types";
 import { NomadPullWorker } from "./nomad.worker";
 
-export interface NomadModuleConfig extends NomadMonitoringConfig {
-  baseUrl: string;
-  token?: string;
+export interface NomadModuleConfig {
   requestTimeoutMs: number;
   tlsRejectUnauthorized: boolean;
   tlsCaFile?: string;
@@ -21,15 +21,16 @@ export function createNomadModule(
   alerting: AlertingService,
   config: NomadModuleConfig
 ) {
-  const client = new NomadClient({
-    baseUrl: config.baseUrl,
-    token: config.token,
+  const clusters = new ClusterRepository(dataSource);
+  const clientFactory: NomadClientFactory = cluster => new NomadClient({
+    baseUrl: cluster.url,
+    token: cluster.token,
     requestTimeoutMs: config.requestTimeoutMs,
     tlsRejectUnauthorized: config.tlsRejectUnauthorized,
     tlsCaFile: config.tlsCaFile
   });
   const monitoring = new MonitoringObservationService(dataSource);
-  const service = new NomadService(client, monitoring, alerting, config);
+  const service = new NomadService(clusters, clientFactory, monitoring, alerting);
   return {
     service,
     worker: new NomadPullWorker(service, {

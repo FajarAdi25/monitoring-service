@@ -14,9 +14,6 @@ async function bootstrap(): Promise<void> {
   });
 
   const nomad = createNomadModule(AppDataSource, alerting.service, {
-    baseUrl: env.nomad.baseUrl,
-    token: env.nomad.token,
-    clusterId: env.nomad.clusterId,
     pullCron: env.nomad.pullCron,
     pullCronTimezone: env.nomad.pullCronTimezone,
     pullRunOnStart: env.nomad.pullRunOnStart,
@@ -33,7 +30,7 @@ async function bootstrap(): Promise<void> {
 
     if (env.nomad.enabled) {
       nomad.worker.start();
-      console.log(`Nomad puller cron active; schedule=${env.nomad.pullCron}; timezone=${env.nomad.pullCronTimezone}; upstream=${env.nomad.baseUrl}`);
+      console.log(`Nomad puller cron active; schedule=${env.nomad.pullCron}; timezone=${env.nomad.pullCronTimezone}`);
     } else {
       console.log("Nomad puller disabled by NOMAD_ENABLED=false");
     }

@@ -45,9 +45,6 @@ export const env = {
   },
   nomad: {
     enabled: boolean("NOMAD_ENABLED", true),
-    baseUrl: required("NOMAD_BASE_URL", "http://127.0.0.1:4646"),
-    token: optional("NOMAD_TOKEN"),
-    clusterId: required("NOMAD_CLUSTER_ID", "1"),
     pullCron: required("NOMAD_PULL_CRON", "*/15 * * * * *"),
     pullCronTimezone: required("NOMAD_PULL_CRON_TZ", "Asia/Jakarta"),
     pullRunOnStart: boolean("NOMAD_PULL_RUN_ON_START", true),

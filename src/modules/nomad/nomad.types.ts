@@ -1,4 +1,5 @@
 import type { ClusterEntity } from "../clusters/cluster.entity";
+import type { ClusterEnvironment } from "../clusters/cluster.enums";
 
 export interface NomadDriverState {
   Attributes?: Record<string, string> | null;
@@ -67,3 +68,26 @@ export interface NomadClientPort {
 }
 
 export type NomadClientFactory = (cluster: ClusterEntity) => NomadClientPort;
+
+export interface NomadClusterApiMetadata {
+  clusterId: string | number;
+  clusterName: string;
+  site: string;
+  appName: string;
+  env: ClusterEnvironment;
+}
+
+export type NomadClusterItem<T> = T & NomadClusterApiMetadata;
+
+export type NomadPullSuccessOutcome = NomadClusterApiMetadata & {
+  success: true;
+  result: NomadPullResult;
+};
+
+export type NomadPullFailureOutcome = NomadClusterApiMetadata & {
+  success: false;
+  error: { code: string; message: string };
+};
+
+export type NomadPullOutcome = NomadPullSuccessOutcome | NomadPullFailureOutcome;
+export type ScopedNomadPullResult = NomadClusterApiMetadata & NomadPullResult;
