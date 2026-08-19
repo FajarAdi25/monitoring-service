@@ -51,8 +51,9 @@ export class DashboardService {
     };
   }
 
-  async summary() {
-    const result = await this.incidents.countSummary();
+  async summary(query: Record<string, unknown>) {
+    const filters = parseDashboardOverviewQuery(query);
+    const result = await this.incidents.countSummary(filters.cluster);
 
     return {
       open: {

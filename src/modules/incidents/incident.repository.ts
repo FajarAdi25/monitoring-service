@@ -146,7 +146,7 @@ export class IncidentRepository {
     return { items, total };
   }
 
-  async countSummary(now = new Date()): Promise<{
+  async countSummary(clusterId?: string, now = new Date()): Promise<{
     activeTotal: number;
     acknowledged: number;
     unacknowledged: number;
@@ -167,42 +167,58 @@ export class IncidentRepository {
     );
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
+    const activeQb = this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.OPEN });
+    const acknowledgedQb = this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.OPEN })
+      .andWhere("i.acknowledged_at IS NOT NULL");
+    const unacknowledgedQb = this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.OPEN })
+      .andWhere("i.acknowledged_at IS NULL");
+    const postponedQb = this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.OPEN })
+      .andWhere("i.postpone_until IS NOT NULL")
+      .andWhere("i.postpone_until > :now", { now });
+    const resolvedTodayQb = this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.RESOLVED })
+      .andWhere("i.resolved_at >= :start", { start: startOfToday });
+    const resolvedLast24Qb = this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.RESOLVED })
+      .andWhere("i.resolved_at >= :start", { start: last24Hours });
+
+    if (clusterId) {
+      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+        qb.andWhere("i.cluster_id = :clusterId", { clusterId });
+      }
+    }
+
     const [activeTotal, acknowledged, unacknowledged, postponed, resolvedToday, resolvedLast24Hours] = await Promise.all([
-      this.repository.count({ where: { status: IncidentStatus.OPEN } }),
-      this.repository.createQueryBuilder("i")
-        .where("i.status = :s", { s: IncidentStatus.OPEN })
-        .andWhere("i.acknowledged_at IS NOT NULL")
-        .getCount(),
-      this.repository.createQueryBuilder("i")
-        .where("i.status = :s", { s: IncidentStatus.OPEN })
-        .andWhere("i.acknowledged_at IS NULL")
-        .getCount(),
-      this.repository.createQueryBuilder("i")
-        .where("i.status = :s", { s: IncidentStatus.OPEN })
-        .andWhere("i.postpone_until IS NOT NULL")
-        .andWhere("i.postpone_until > :now", { now })
-        .getCount(),
-      this.repository.createQueryBuilder("i")
-        .where("i.status = :s", { s: IncidentStatus.RESOLVED })
-        .andWhere("i.resolved_at >= :start", { start: startOfToday })
-        .getCount(),
-      this.repository.createQueryBuilder("i")
-        .where("i.status = :s", { s: IncidentStatus.RESOLVED })
-        .andWhere("i.resolved_at >= :start", { start: last24Hours })
-        .getCount()
+      activeQb.getCount(),
+      acknowledgedQb.getCount(),
+      unacknowledgedQb.getCount(),
+      postponedQb.getCount(),
+      resolvedTodayQb.getCount(),
+      resolvedLast24Qb.getCount()
     ]);
 
-    const severityRows = await this.repository.createQueryBuilder("i")
+    const severityQb = this.repository.createQueryBuilder("i")
       .select("i.severity", "key")
       .addSelect("COUNT(*)", "count")
-      .where("i.status = :s", { s: IncidentStatus.OPEN })
-      .groupBy("i.severity")
-      .getRawMany<{ key: string; count: string }>();
-
-    const typeRows = await this.repository.createQueryBuilder("i")
+      .where("i.status = :s", { s: IncidentStatus.OPEN });
+    const typeQb = this.repository.createQueryBuilder("i")
       .select("i.type", "key")
       .addSelect("COUNT(*)", "count")
-      .where("i.status = :s", { s: IncidentStatus.OPEN })
+      .where("i.status = :s", { s: IncidentStatus.OPEN });
+
+    if (clusterId) {
+      severityQb.andWhere("i.cluster_id = :clusterId", { clusterId });
+      typeQb.andWhere("i.cluster_id = :clusterId", { clusterId });
+    }
+
+    const severityRows = await severityQb
+      .groupBy("i.severity")
+      .getRawMany<{ key: string; count: string }>();
+    const typeRows = await typeQb
       .groupBy("i.type")
       .getRawMany<{ key: string; count: string }>();
 
