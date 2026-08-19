@@ -225,7 +225,7 @@ noOverlap = true
 worker running guard = true
 ```
 
-Nomad cluster URL, token, name, site, application name, and environment are loaded from the MySQL `clusters` table. The v2.0.0 migration creates only the table schema and inserts zero rows. Production cluster rows must be inserted manually after migration. `NOMAD_BASE_URL`, `NOMAD_TOKEN`, and `NOMAD_CLUSTER_ID` are no longer runtime configuration.
+Nomad cluster URL, token, name, site, application name, and environment are loaded from the MySQL `clusters` table. The v2.0.0 migration creates only the table schema and inserts zero rows. Production cluster rows must be inserted manually after migration. The previous single-cluster URL, token, and cluster-ID environment variables are no longer runtime configuration.
 
 Global timeout/TLS/cron settings remain in the environment.
 
