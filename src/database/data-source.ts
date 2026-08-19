@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { env } from "../config/env";
+import { ClusterEntity } from "../modules/clusters/cluster.entity";
 import { IncidentEntity } from "../modules/incidents/incident.entity";
 import { MonitoringCurrentStateEntity } from "../modules/monitoring/monitoring-current-state.entity";
 import { MonitoringSnapshotEntity } from "../modules/monitoring/monitoring-snapshot.entity";
@@ -13,6 +14,7 @@ import { AddClosureReminderFields1786680500000 } from "./migrations/178668050000
 import { ReplaceCloseWithPostpone1786680600000 } from "./migrations/1786680600000-ReplaceCloseWithPostpone";
 import { NormalizeNomadIncidentSeverity1786680700000 } from "./migrations/1786680700000-NormalizeNomadIncidentSeverity";
 import { AddIncidentUserIdentity1786680800000 } from "./migrations/1786680800000-AddIncidentUserIdentity";
+import { CreateClusters1786680900000 } from "./migrations/1786680900000-CreateClusters";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -22,6 +24,7 @@ export const AppDataSource = new DataSource({
   password: env.db.password,
   database: env.db.database,
   entities: [
+    ClusterEntity,
     IncidentEntity,
     MonitoringSnapshotEntity,
     MonitoringCurrentStateEntity,
@@ -36,6 +39,7 @@ export const AppDataSource = new DataSource({
     ReplaceCloseWithPostpone1786680600000,
     NormalizeNomadIncidentSeverity1786680700000,
     AddIncidentUserIdentity1786680800000,
+    CreateClusters1786680900000,
   ],
   synchronize: false,
   logging: false,
