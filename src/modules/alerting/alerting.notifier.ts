@@ -1,10 +1,11 @@
+import type { ClusterMetadata, ClusterRepositoryPort } from "../clusters/cluster.types";
 import type { AlertNotification } from "./alerting.types";
 
 export interface AlertNotifier {
   send(notification: AlertNotification): Promise<void>;
 }
 
-function toWebhookPayload(notification: AlertNotification) {
+function toWebhookPayload(notification: AlertNotification, cluster: ClusterMetadata) {
   const { incident, kind } = notification;
   return {
     event: "INCIDENT_ALERT",
@@ -21,6 +22,10 @@ function toWebhookPayload(notification: AlertNotification) {
         name: incident.resourceName
       },
       message: incident.message,
+      clusterName: cluster.clusterName,
+      site: cluster.site,
+      appName: cluster.appName,
+      env: cluster.env,
       openedAt: incident.openedAt.toISOString(),
       resolvedAt: incident.resolvedAt?.toISOString() ?? null,
       reminderCount: kind === "REMINDER"
@@ -45,19 +50,35 @@ function toWebhookPayload(notification: AlertNotification) {
   };
 }
 
+async function metadataFor(
+  clusters: ClusterRepositoryPort,
+  notification: AlertNotification
+): Promise<ClusterMetadata> {
+  const cluster = await clusters.findMetadataById(notification.incident.clusterId);
+  if (!cluster) {
+    throw new Error(`Cluster metadata missing for cluster ${notification.incident.clusterId}.`);
+  }
+  return cluster;
+}
+
 export class ConsoleAlertNotifier implements AlertNotifier {
+  constructor(private readonly clusters: ClusterRepositoryPort) {}
+
   async send(notification: AlertNotification): Promise<void> {
-    console.log(`[ALERT:${notification.kind}] ${JSON.stringify(toWebhookPayload(notification))}`);
+    const cluster = await metadataFor(this.clusters, notification);
+    console.log(`[ALERT:${notification.kind}] ${JSON.stringify(toWebhookPayload(notification, cluster))}`);
   }
 }
 
 export class HttpWebhookAlertNotifier implements AlertNotifier {
   constructor(
+    private readonly clusters: ClusterRepositoryPort,
     private readonly webhookUrl: string,
     private readonly timeoutMs = 5000
   ) {}
 
   async send(notification: AlertNotification): Promise<void> {
+    const cluster = await metadataFor(this.clusters, notification);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -65,7 +86,7 @@ export class HttpWebhookAlertNotifier implements AlertNotifier {
       const response = await fetch(this.webhookUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(toWebhookPayload(notification)),
+        body: JSON.stringify(toWebhookPayload(notification, cluster)),
         signal: controller.signal
       });
 

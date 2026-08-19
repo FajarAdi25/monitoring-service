@@ -25,8 +25,8 @@ export function createAlertingModule(
   const incidentRepository = new IncidentRepository(dataSource);
   const incidentService = new IncidentService(incidentRepository, clusterRepository);
   const notifier = config.webhookUrl
-    ? new HttpWebhookAlertNotifier(config.webhookUrl)
-    : new ConsoleAlertNotifier();
+    ? new HttpWebhookAlertNotifier(clusterRepository, config.webhookUrl)
+    : new ConsoleAlertNotifier(clusterRepository);
 
   return {
     service: new AlertingService(
