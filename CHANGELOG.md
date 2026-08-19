@@ -1,3 +1,24 @@
+# v1.9.6 - Compose Configuration Alignment
+
+- Applied the Monitoring Service container configuration consistently to `docker-compose.yml`, `compose.local.yml`, and `compose.dev.yml`.
+- Added `container_name: monitoring-service` to the local compose definitions.
+- Updated all Monitoring Service image tags to `monitoring-service:1.9.6`.
+- Preserved each compose file's existing environment file and host bind behavior.
+- No application behavior or database schema changes.
+
+# v1.9.5 - Development Compose Configuration
+
+- Updated `compose.dev.yml` for the development Monitoring Service container.
+- Added `container_name: monitoring-service`.
+- Updated the development image tag to `monitoring-service:1.9.5`.
+- No application behavior or database schema changes.
+
+# v1.9.4 - Incident Action Metadata in Alert Webhook
+
+- Subsequent webhook broadcasts include ACK metadata when an incident has been acknowledged: `acknowledgedAt`, `acknowledgedByUserName`, and `acknowledgementNote`.
+- Subsequent webhook broadcasts include POSTPONE metadata when an incident has been postponed: `postponedAt`, `postponedByUserName`, `postponeUntil`, and `postponeRemark`.
+- ACK/POSTPONE lifecycle behavior and database schema are unchanged.
+
 # v1.9.3 - Local Docker Port Alignment
 
 - Windows host exposes Monitoring Service on port `3001`.

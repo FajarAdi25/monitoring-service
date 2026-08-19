@@ -1,9 +1,10 @@
 services:
   monitoring-service:
+    container_name: monitoring-service
     build:
       context: .
       dockerfile: Dockerfile
-    image: monitoring-service:1.9.3
+    image: monitoring-service:1.9.6
     init: true
     env_file:
       - .env.docker.local
@@ -14,7 +15,13 @@ services:
     volumes:
       - ./docker/certs:/app/certs:ro
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/api/v1/dashboard/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/api/v1/dashboard/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 6

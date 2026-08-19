@@ -1,4 +1,4 @@
-# Monitoring Service v1.9.3
+# Monitoring Service v1.9.6
 
 Node.js + TypeScript + TypeORM + MySQL monitoring service for Nomad telemetry, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
 
@@ -55,7 +55,7 @@ Current local Docker mapping is `localhost:3001 -> container:3002`. MySQL and Te
 docker compose --env-file .env.docker.local -f compose.local.yml up -d --build
 ```
 
-For an existing database, run `npm run db:migrate`. v1.9.3 does not add a database migration; the v1.8.0 user identity migration remains the latest schema change.
+For an existing database, run `npm run db:migrate`. v1.9.6 does not add a database migration; the v1.8.0 user identity migration remains the latest schema change.
 
 ## Important environment variables
 
@@ -194,10 +194,19 @@ Example:
     "message": "Docker driver unhealthy",
     "openedAt": "2026-08-16T03:00:00.000Z",
     "resolvedAt": "2026-08-16T03:17:30.000Z",
-    "reminderCount": 3
+    "reminderCount": 3,
+    "acknowledgedAt": "2026-08-16T03:05:00.000Z",
+    "acknowledgedByUserName": "Budi Santoso",
+    "acknowledgementNote": "Sedang dicek",
+    "postponedAt": "2026-08-16T03:10:00.000Z",
+    "postponedByUserName": "Budi Santoso",
+    "postponeUntil": "2026-08-16T04:00:00.000Z",
+    "postponeRemark": "Menunggu maintenance selesai"
   }
 }
 ```
+
+ACK metadata is included only after the incident has been acknowledged. POSTPONE metadata is included only after the incident has been postponed. These metadata fields are included in subsequent `REMINDER` and `RESOLVED` webhook broadcasts when present.
 
 ## Monitoring data
 

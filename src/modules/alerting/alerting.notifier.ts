@@ -25,7 +25,22 @@ function toWebhookPayload(notification: AlertNotification) {
       resolvedAt: incident.resolvedAt?.toISOString() ?? null,
       reminderCount: kind === "REMINDER"
         ? incident.reminderCount + 1
-        : incident.reminderCount
+        : incident.reminderCount,
+      ...(incident.acknowledgedAt !== null
+        ? {
+            acknowledgedAt: incident.acknowledgedAt.toISOString(),
+            acknowledgedByUserName: incident.acknowledgedByUserName,
+            acknowledgementNote: incident.acknowledgementNote
+          }
+        : {}),
+      ...(incident.postponedAt !== null
+        ? {
+            postponedAt: incident.postponedAt.toISOString(),
+            postponedByUserName: incident.postponedByUserName,
+            postponeUntil: incident.postponeUntil?.toISOString() ?? null,
+            postponeRemark: incident.postponeRemark
+          }
+        : {})
     }
   };
 }

@@ -34,12 +34,14 @@ export const env = {
   appPort,
   alerting: {
     pollIntervalMs: Number(process.env.ALERTING_POLL_INTERVAL_MS ?? 1000),
-    openReminderIntervalMs: Number(process.env.ALERT_REMINDER_INTERVAL_MS ?? 60000),
-    webhookUrl: optional("ALERT_WEBHOOK_URL") ?? `http://127.0.0.1:${appPort}/api/v1/webhooks/telegram/dummy`
+    openReminderIntervalMs: Number(
+      process.env.ALERT_REMINDER_INTERVAL_MS ?? 60000,
+    ),
+    webhookUrl: optional("ALERT_WEBHOOK_URL"),
   },
   telegramBot: {
     basicAuthUsername: required("MONITORING_BASIC_AUTH_USERNAME"),
-    basicAuthPassword: required("MONITORING_BASIC_AUTH_PASSWORD")
+    basicAuthPassword: required("MONITORING_BASIC_AUTH_PASSWORD"),
   },
   nomad: {
     enabled: boolean("NOMAD_ENABLED", true),
@@ -51,18 +53,18 @@ export const env = {
     pullRunOnStart: boolean("NOMAD_PULL_RUN_ON_START", true),
     requestTimeoutMs: Number(process.env.NOMAD_REQUEST_TIMEOUT_MS ?? 10000),
     tlsRejectUnauthorized: boolean("NOMAD_TLS_REJECT_UNAUTHORIZED", true),
-    tlsCaFile: optional("NOMAD_TLS_CA_FILE")
+    tlsCaFile: optional("NOMAD_TLS_CA_FILE"),
   },
   db: {
     host: required("DB_HOST", "127.0.0.1"),
     port: Number(process.env.DB_PORT ?? 3306),
     username: required("DB_USERNAME", "monitoring"),
     password: required("DB_PASSWORD", "monitoring"),
-    database: required("DB_NAME", "monitoring")
+    database: required("DB_NAME", "monitoring"),
   },
   user: {
     id: required("CURRENT_USER_ID", "1"),
     name: required("CURRENT_USER_NAME", "Infrastructure Admin"),
-    role: role as Role
-  }
+    role: role as Role,
+  },
 };
