@@ -1,4 +1,4 @@
-# Dashboard API v1.7.1
+# Dashboard API v2.0.0
 
 Dashboard API follows the current lifecycle used by the service:
 
@@ -83,6 +83,14 @@ If no Nomad current-state data has been observed yet, `healthy` is `null`.
 GET /api/v1/dashboard/incidents/summary
 ```
 
+Optional query:
+
+```text
+cluster
+```
+
+When omitted, summary aggregates all clusters. When provided, every summary count/group is scoped to that cluster.
+
 Example:
 
 ```json
@@ -117,6 +125,8 @@ Example:
 `postponed` is a subset of `open`. An incident is currently postponed when it is `OPEN` and `postpone_until` is later than the current time.
 
 `resolved.today` uses the monitoring service process local day boundary. `resolved.last24Hours` is a rolling 24-hour window.
+
+Incident list rows returned by recent/resolved APIs preserve `clusterId` and add `clusterName`, `site`, `appName`, and `env`.
 
 ## Recent incidents
 

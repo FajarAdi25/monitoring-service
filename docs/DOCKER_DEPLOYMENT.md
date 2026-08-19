@@ -225,13 +225,9 @@ noOverlap = true
 worker running guard = true
 ```
 
-If Nomad is on the same host:
+Nomad cluster URL, token, name, site, application name, and environment are loaded from the MySQL `clusters` table. The v2.0.0 migration creates only the table schema and inserts zero rows. Production cluster rows must be inserted manually after migration. `NOMAD_BASE_URL`, `NOMAD_TOKEN`, and `NOMAD_CLUSTER_ID` are no longer runtime configuration.
 
-```env
-NOMAD_BASE_URL=http://host.docker.internal:4646
-```
-
-If Nomad is remote, use its normal reachable URL.
+Global timeout/TLS/cron settings remain in the environment.
 
 ## TLS CA
 

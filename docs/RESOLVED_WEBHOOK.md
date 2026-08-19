@@ -18,6 +18,10 @@ When the monitoring engine performs an actual `OPEN -> RESOLVED` transition, it 
       "name": "nomadworker-east-4/docker"
     },
     "message": "Docker driver unhealthy",
+    "clusterName": "Cluster EAST",
+    "site": "cawang",
+    "appName": "Nomad East Lab App",
+    "env": "PRODUCTION",
     "openedAt": "2026-08-16T03:00:00.000Z",
     "resolvedAt": "2026-08-16T03:17:30.000Z",
     "reminderCount": 3,
@@ -35,3 +39,5 @@ When the monitoring engine performs an actual `OPEN -> RESOLVED` transition, it 
 Recovery is committed to the database before the webhook side effect. A webhook delivery failure does not revert the incident to OPEN.
 
 ACK metadata is included when the incident was acknowledged before the broadcast. POSTPONE metadata is included when the incident was postponed before the broadcast.
+
+The same cluster metadata fields (`clusterName`, `site`, `appName`, `env`) are included in INITIAL, REMINDER, and RESOLVED broadcasts. `clusterId`, cluster URL, and token are not included. Values shown above are sample/dummy metadata only.

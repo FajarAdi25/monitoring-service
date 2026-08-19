@@ -101,27 +101,33 @@ The alerting layer still updates `last_detected_at` while a failure remains acti
 
 ## Service API
 
-Nomad proxy/read endpoints:
+Nomad cluster connection settings come from the MySQL `clusters` table. The schema migration seeds zero rows; production rows are inserted manually. The implementation supports any number of registered rows.
+
+Nomad proxy/read endpoints accept optional `cluster`:
 
 ```text
+GET /api/v1/nomad/nodes?cluster=1
 GET /api/v1/nomad/nodes
-GET /api/v1/nomad/nodes/:nodeId
-
-GET /api/v1/nomad/allocations
-GET /api/v1/nomad/allocations/failed
-GET /api/v1/nomad/allocations/:allocationId
-
-GET /api/v1/nomad/jobs/:jobId/summary
-GET /api/v1/nomad/evaluations/blocked
+GET /api/v1/nomad/nodes/:nodeId?cluster=1
+GET /api/v1/nomad/allocations?cluster=1
+GET /api/v1/nomad/allocations/failed?cluster=1
+GET /api/v1/nomad/allocations/:allocationId?cluster=1
+GET /api/v1/nomad/jobs/:jobId/summary?cluster=1
+GET /api/v1/nomad/evaluations/blocked?cluster=1
 ```
+
+When `cluster` is omitted from list endpoints, results from all registered clusters are flattened. Every returned item adds `clusterId`, `clusterName`, `site`, `appName`, and `env`. `url` and `token` are never serialized.
+
+For detail endpoints without `cluster`: zero matches return `NOMAD_RESOURCE_NOT_FOUND`; multiple matches return `NOMAD_RESOURCE_CLUSTER_AMBIGUOUS`. Upstream errors other than resource 404 fail the request.
 
 Manual pull:
 
 ```text
+POST /api/v1/nomad/pull?cluster=1
 POST /api/v1/nomad/pull
 ```
 
-Manual pull requires `ADMIN`.
+Manual pull requires `ADMIN`. All-cluster pull returns one per-cluster success/error outcome and continues processing remaining clusters after one cluster fails.
 
 Snapshots:
 
@@ -141,20 +147,17 @@ limit
 
 ## Configuration
 
+Cluster `url` and `token` are stored in `clusters`, not environment variables. Global pull/transport settings remain environment-driven:
+
 ```env
 NOMAD_ENABLED=true
-NOMAD_BASE_URL=http://127.0.0.1:4646
-NOMAD_TOKEN=
-NOMAD_CLUSTER_ID=1
 NOMAD_PULL_CRON="*/15 * * * * *"
 NOMAD_PULL_CRON_TZ=Asia/Jakarta
 NOMAD_PULL_RUN_ON_START=true
 NOMAD_REQUEST_TIMEOUT_MS=10000
+NOMAD_TLS_REJECT_UNAUTHORIZED=true
+NOMAD_TLS_CA_FILE=
 ```
-
-`NOMAD_BASE_URL` must include the URL scheme.
-
-The supplied Postman collection contains an `X-Nomad-Token`. The project intentionally does not embed that value. Set the runtime token through `NOMAD_TOKEN`.
 
 ## Severity
 

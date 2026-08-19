@@ -1,4 +1,4 @@
-# Monitoring Service v1.9.6
+# Monitoring Service v2.0.0
 
 Node.js + TypeScript + TypeORM + MySQL monitoring service for Nomad telemetry, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
 
@@ -55,7 +55,7 @@ Current local Docker mapping is `localhost:3001 -> container:3002`. MySQL and Te
 docker compose --env-file .env.docker.local -f compose.local.yml up -d --build
 ```
 
-For an existing database, run `npm run db:migrate`. v1.9.6 does not add a database migration; the v1.8.0 user identity migration remains the latest schema change.
+For an existing database, run `npm run db:migrate`. v2.0.0 adds the schema-only `clusters` registry migration. The migration inserts no cluster rows; production cluster records are provisioned manually in MySQL.
 
 ## Important environment variables
 
@@ -192,6 +192,10 @@ Example:
       "name": "nomadworker-east-4/docker"
     },
     "message": "Docker driver unhealthy",
+    "clusterName": "Cluster EAST",
+    "site": "cawang",
+    "appName": "Nomad East Lab App",
+    "env": "PRODUCTION",
     "openedAt": "2026-08-16T03:00:00.000Z",
     "resolvedAt": "2026-08-16T03:17:30.000Z",
     "reminderCount": 3,
@@ -228,18 +232,26 @@ GET /api/v1/monitoring/current
 GET /api/v1/monitoring/snapshots
 ```
 
-## Nomad API
+Monitoring and incident responses preserve their existing `clusterId` and add `clusterName`, `site`, `appName`, and `env`.
+
+## Nomad multi-cluster registry and API
+
+Nomad connection data is loaded from the `clusters` table. The migration creates the schema only; operations inserts production rows manually. Runtime supports any number of registered clusters. `url` and `token` are internal and are never exposed through existing APIs or webhooks.
 
 ```text
+GET  /api/v1/nomad/nodes?cluster=1
 GET  /api/v1/nomad/nodes
-GET  /api/v1/nomad/nodes/:nodeId
-GET  /api/v1/nomad/allocations
-GET  /api/v1/nomad/allocations/failed
-GET  /api/v1/nomad/allocations/:allocationId
-GET  /api/v1/nomad/jobs/:jobId/summary
-GET  /api/v1/nomad/evaluations/blocked
+GET  /api/v1/nomad/nodes/:nodeId?cluster=1
+GET  /api/v1/nomad/allocations?cluster=1
+GET  /api/v1/nomad/allocations/failed?cluster=1
+GET  /api/v1/nomad/allocations/:allocationId?cluster=1
+GET  /api/v1/nomad/jobs/:jobId/summary?cluster=1
+GET  /api/v1/nomad/evaluations/blocked?cluster=1
+POST /api/v1/nomad/pull?cluster=1
 POST /api/v1/nomad/pull
 ```
+
+`cluster` is optional. List endpoints without it flatten results from all registered clusters and add `clusterId`, `clusterName`, `site`, `appName`, and `env` to each item. Unscoped detail lookup returns `NOMAD_RESOURCE_NOT_FOUND` when no cluster matches and `NOMAD_RESOURCE_CLUSTER_AMBIGUOUS` when more than one cluster matches. All-cluster pull returns one success/error outcome per cluster and continues when one cluster fails.
 
 ## Dashboard API
 

@@ -1,3 +1,12 @@
+# v2.0.0 - Database-Driven Multi-Cluster Nomad Monitoring
+
+- Added schema-only `clusters` registry; production cluster rows are provisioned manually and no dummy cluster data is seeded.
+- Nomad reads and scheduled/manual pulls now resolve any number of clusters dynamically from MySQL.
+- Added optional `cluster` scoping, flattened all-cluster list responses, deterministic unscoped detail 404/409 behavior, and per-cluster pull outcomes.
+- Added `clusterName`, `site`, `appName`, and `env` to approved monitoring/incident API outputs and incident webhook broadcasts.
+- Removed runtime consumption of `NOMAD_BASE_URL`, `NOMAD_TOKEN`, and `NOMAD_CLUSTER_ID`; URL/token remain internal database fields.
+- Updated Monitoring Service and Compose image version to `2.0.0`.
+
 # v1.9.6 - Compose Configuration Alignment
 
 - Applied the Monitoring Service container configuration consistently to `docker-compose.yml`, `compose.local.yml`, and `compose.dev.yml`.
