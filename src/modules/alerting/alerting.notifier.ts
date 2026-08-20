@@ -31,21 +31,35 @@ function toWebhookPayload(notification: AlertNotification, cluster: ClusterMetad
       reminderCount: kind === "REMINDER"
         ? incident.reminderCount + 1
         : incident.reminderCount,
-      ...(incident.acknowledgedAt !== null
-        ? {
-            acknowledgedAt: incident.acknowledgedAt.toISOString(),
-            acknowledgedByUserName: incident.acknowledgedByUserName,
-            acknowledgementNote: incident.acknowledgementNote
-          }
-        : {}),
-      ...(incident.postponedAt !== null
-        ? {
-            postponedAt: incident.postponedAt.toISOString(),
-            postponedByUserName: incident.postponedByUserName,
-            postponeUntil: incident.postponeUntil?.toISOString() ?? null,
-            postponeRemark: incident.postponeRemark
-          }
-        : {})
+      acknowledgement: {
+        status: incident.acknowledgedAt !== null,
+        ...(incident.acknowledgedAt !== null
+          ? {
+              by: {
+                id: incident.acknowledgedBy,
+                name: incident.acknowledgedByUserName,
+                username: incident.acknowledgedByUsername
+              },
+              at: incident.acknowledgedAt.toISOString(),
+              note: incident.acknowledgementNote
+            }
+          : {})
+      },
+      postpone: {
+        status: incident.postponedAt !== null,
+        ...(incident.postponedAt !== null
+          ? {
+              by: {
+                id: incident.postponedBy,
+                name: incident.postponedByUserName,
+                username: incident.postponedByUsername
+              },
+              at: incident.postponedAt.toISOString(),
+              until: incident.postponeUntil?.toISOString() ?? null,
+              remark: incident.postponeRemark
+            }
+          : {})
+      }
     }
   };
 }
