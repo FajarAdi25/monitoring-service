@@ -27,6 +27,8 @@ export class MonitoringCurrentStateService {
       resourceType: stringQuery(query.resourceType),
       resourceKey: stringQuery(query.resourceKey),
       state: stringQuery(query.state),
+      from: query.from ? new Date(String(query.from)) : undefined,
+      to: query.to ? new Date(String(query.to)) : undefined,
       limit
     });
 

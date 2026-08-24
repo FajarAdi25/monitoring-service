@@ -56,6 +56,8 @@ export interface DashboardRecentFilters {
   acknowledged?: boolean;
   postponed?: boolean;
   limit: number;
+  from?: Date;
+  to?: Date;
 }
 
 export interface DashboardResolvedFilters {
@@ -69,8 +71,13 @@ export interface DashboardResolvedFilters {
   limit: number;
 }
 
-export function parseDashboardOverviewQuery(query: Record<string, unknown>): { cluster?: string } {
-  return { cluster: one(query.cluster) };
+export function parseDashboardOverviewQuery(query: Record<string, unknown>): { cluster?: string; from?: Date; to?: Date } {
+  const from = date(query.from, "from");
+  const to = date(query.to, "to");
+  if (from && to && from.getTime() > to.getTime()) {
+    throw new AppError(400, "INVALID_QUERY", "from must be earlier than or equal to to.");
+  }
+  return { cluster: one(query.cluster), from, to };
 }
 
 export function parseDashboardRecentQuery(query: Record<string, unknown>): DashboardRecentFilters {
@@ -82,6 +89,8 @@ export function parseDashboardRecentQuery(query: Record<string, unknown>): Dashb
     type: one(query.type),
     acknowledged: bool(query.acknowledged, "acknowledged"),
     postponed: bool(query.postponed, "postponed"),
+    from: date(query.from, "from"),
+    to: date(query.to, "to"),
     limit: positiveInt(query.limit, 20, 100)
   };
 }

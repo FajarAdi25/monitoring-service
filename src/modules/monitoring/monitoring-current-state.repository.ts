@@ -17,6 +17,8 @@ export class MonitoringCurrentStateRepository {
     if (filters.resourceType) qb.andWhere("current.resource_type = :resourceType", { resourceType: filters.resourceType });
     if (filters.resourceKey) qb.andWhere("current.resource_key = :resourceKey", { resourceKey: filters.resourceKey });
     if (filters.state) qb.andWhere("current.state = :state", { state: filters.state });
+    if (filters.from) qb.andWhere("current.last_checked_at >= :from", { from: filters.from });
+    if (filters.to) qb.andWhere("current.last_checked_at <= :to", { to: filters.to });
 
     return qb
       .orderBy("current.last_checked_at", "DESC")

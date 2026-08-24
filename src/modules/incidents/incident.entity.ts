@@ -4,10 +4,12 @@ import {
   Entity,
   Index,
   PrimaryGeneratedColumn,
-  UpdateDateColumn
+  UpdateDateColumn,
+  OneToOne
 } from "typeorm";
 import type { Timestamp } from "../../common/types/timestamp";
 import { IncidentSeverity, IncidentStatus } from "./incident.enums";
+import { ResolutionTimeEntity } from "./resolution-time.entity";
 
 @Entity({ name: "incidents" })
 @Index("uq_incidents_public_id", ["publicId"], { unique: true })
@@ -114,4 +116,7 @@ export class IncidentEntity {
 
   @UpdateDateColumn({ name: "updated_at", type: "timestamp", precision: 3 })
   updatedAt!: Timestamp;
+
+  @OneToOne(() => ResolutionTimeEntity, resolutionTime => resolutionTime.incident)
+  resolutionTime?: ResolutionTimeEntity;
 }

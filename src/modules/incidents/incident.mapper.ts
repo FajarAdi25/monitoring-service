@@ -60,7 +60,8 @@ export function mapIncidentListItem(entity: IncidentEntity, metadata: ClusterMet
     message: entity.message,
     openedAt: entity.openedAt,
     lastDetectedAt: entity.lastDetectedAt,
-    resolvedAt: entity.resolvedAt
+    resolvedAt: entity.resolvedAt,
+    durationSeconds: entity.resolutionTime?.durationSeconds ?? null
   };
 }
 
@@ -104,7 +105,8 @@ export function mapIncidentDetail(entity: IncidentEntity, metadata: ClusterMetad
       postponeUntil: entity.postponeUntil,
       remark: entity.postponeRemark
     },
-    resolvedAt: entity.resolvedAt
+    resolvedAt: entity.resolvedAt,
+    durationSeconds: entity.resolutionTime?.durationSeconds ?? null
   };
 }
 

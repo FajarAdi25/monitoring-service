@@ -11,7 +11,10 @@ export class IncidentRepository {
   }
 
   findByPublicId(publicId: string): Promise<IncidentEntity | null> {
-    return this.repository.findOne({ where: { publicId } });
+    return this.repository.findOne({
+      where: { publicId },
+      relations: { resolutionTime: true }
+    });
   }
 
   findOpenByActiveFingerprint(fingerprint: string): Promise<IncidentEntity | null> {
@@ -61,7 +64,8 @@ export class IncidentRepository {
   }
 
   async list(filters: IncidentListFilters): Promise<{ items: IncidentEntity[]; total: number }> {
-    const qb = this.repository.createQueryBuilder("incident");
+    const qb = this.repository.createQueryBuilder("incident")
+      .leftJoinAndSelect("incident.resolutionTime", "resolutionTime");
 
     if (filters.cluster) qb.andWhere("incident.cluster_id = :cluster", { cluster: filters.cluster });
     if (filters.source) qb.andWhere("incident.source = :source", { source: filters.source });
@@ -146,7 +150,7 @@ export class IncidentRepository {
     return { items, total };
   }
 
-  async countSummary(clusterId?: string, now = new Date()): Promise<{
+  async countSummary(input: { clusterId?: string; from?: Date; to?: Date }, now = new Date()): Promise<{
     activeTotal: number;
     acknowledged: number;
     unacknowledged: number;
@@ -186,9 +190,19 @@ export class IncidentRepository {
       .where("i.status = :s", { s: IncidentStatus.RESOLVED })
       .andWhere("i.resolved_at >= :start", { start: last24Hours });
 
-    if (clusterId) {
+    if (input.clusterId) {
       for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
-        qb.andWhere("i.cluster_id = :clusterId", { clusterId });
+        qb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });
+      }
+    }
+    if (input.from) {
+      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+        qb.andWhere("i.opened_at >= :from", { from: input.from });
+      }
+    }
+    if (input.to) {
+      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+        qb.andWhere("i.opened_at <= :to", { to: input.to });
       }
     }
 
@@ -210,9 +224,17 @@ export class IncidentRepository {
       .addSelect("COUNT(*)", "count")
       .where("i.status = :s", { s: IncidentStatus.OPEN });
 
-    if (clusterId) {
-      severityQb.andWhere("i.cluster_id = :clusterId", { clusterId });
-      typeQb.andWhere("i.cluster_id = :clusterId", { clusterId });
+    if (input.clusterId) {
+      severityQb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });
+      typeQb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });
+    }
+    if (input.from) {
+      severityQb.andWhere("i.opened_at >= :from", { from: input.from });
+      typeQb.andWhere("i.opened_at >= :from", { from: input.from });
+    }
+    if (input.to) {
+      severityQb.andWhere("i.opened_at <= :to", { to: input.to });
+      typeQb.andWhere("i.opened_at <= :to", { to: input.to });
     }
 
     const severityRows = await severityQb

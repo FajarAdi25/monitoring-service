@@ -4,5 +4,7 @@ export interface MonitoringCurrentStateFilters {
   resourceType?: string;
   resourceKey?: string;
   state?: string;
+  from?: Date;
+  to?: Date;
   limit: number;
 }

@@ -53,7 +53,7 @@ export class DashboardService {
 
   async summary(query: Record<string, unknown>) {
     const filters = parseDashboardOverviewQuery(query);
-    const result = await this.incidents.countSummary(filters.cluster);
+    const result = await this.incidents.countSummary({ clusterId: filters.cluster, from: filters.from, to: filters.to });
 
     return {
       open: {
