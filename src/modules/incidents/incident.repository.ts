@@ -79,7 +79,7 @@ export class IncidentRepository {
     if (filters.from) qb.andWhere("incident.opened_at >= :from", { from: filters.from });
     if (filters.to) qb.andWhere("incident.opened_at <= :to", { to: filters.to });
 
-    qb.orderBy("incident.opened_at", "DESC")
+    qb.orderBy("incident.openedAt", "DESC")
       .skip((filters.page - 1) * filters.limit)
       .take(filters.limit);
 
@@ -119,7 +119,7 @@ export class IncidentRepository {
       );
     }
 
-    return qb.orderBy("incident.opened_at", "DESC").take(input.limit).getMany();
+    return qb.orderBy("incident.openedAt", "DESC").take(input.limit).getMany();
   }
 
   async resolvedHistory(input: {
@@ -142,7 +142,7 @@ export class IncidentRepository {
     if (input.from) qb.andWhere("incident.resolved_at >= :from", { from: input.from });
     if (input.to) qb.andWhere("incident.resolved_at <= :to", { to: input.to });
 
-    qb.orderBy("incident.resolved_at", "DESC")
+    qb.orderBy("incident.resolvedAt", "DESC")
       .skip((input.page - 1) * input.limit)
       .take(input.limit);
 
