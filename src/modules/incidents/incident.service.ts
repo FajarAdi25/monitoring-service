@@ -55,6 +55,7 @@ export class IncidentService {
     incident.acknowledgedByUserName = user.name;
     incident.acknowledgedByUsername = user.username ?? null;
     incident.acknowledgementNote = note?.trim() || null;
+    incident.nextNotificationAt = new Date(Date.now() + 3 * 60 * 1000);
     const saved = await this.repository.save(incident);
     return mapAcknowledgeResponse(saved, user);
   }

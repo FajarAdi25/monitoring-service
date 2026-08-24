@@ -175,9 +175,10 @@ export class NomadService {
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
 
-    const [nodes, allocations, blockedEvaluations] = await Promise.all([
+    const [nodes, allocations, failedAllocations, blockedEvaluations] = await Promise.all([
       client.getNodes(),
       client.getAllocations(),
+      client.getFailedAllocations(),
       client.getBlockedEvaluations()
     ]);
 
@@ -188,7 +189,12 @@ export class NomadService {
       recoveriesProcessed += result.recoveriesProcessed;
     }
 
-    const allocationResult = await this.processAllocations(cluster.clusterId, allocations, now);
+    const allocationResult = await this.processAllocations(
+      cluster.clusterId,
+      allocations,
+      failedAllocations,
+      now
+    );
     snapshotChanges += allocationResult.snapshotChanges;
     failuresProcessed += allocationResult.failuresProcessed;
     recoveriesProcessed += allocationResult.recoveriesProcessed;
@@ -318,12 +324,18 @@ export class NomadService {
     return { snapshotChanges, failuresProcessed, recoveriesProcessed };
   }
 
-  private async processAllocations(clusterId: string, allocations: NomadAllocation[], observedAt: Date) {
+  private async processAllocations(
+    clusterId: string,
+    allocations: NomadAllocation[],
+    failedAllocations: NomadAllocation[],
+    observedAt: Date
+  ) {
     let snapshotChanges = 0;
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
 
     const groups = new Map<string, NomadAllocation[]>();
+    const failedGroups = new Map<string, NomadAllocation[]>();
 
     for (const allocation of allocations) {
       const identity = getNomadAllocationLogicalIdentity(allocation);
@@ -332,8 +344,20 @@ export class NomadService {
       groups.set(identity.resourceKey, group);
     }
 
-    for (const group of groups.values()) {
-      const result = await this.processAllocationGroup(clusterId, group, observedAt);
+    for (const allocation of failedAllocations) {
+      const identity = getNomadAllocationLogicalIdentity(allocation);
+      const group = failedGroups.get(identity.resourceKey) ?? [];
+      group.push(allocation);
+      failedGroups.set(identity.resourceKey, group);
+    }
+
+    for (const [resourceKey, group] of groups.entries()) {
+      const result = await this.processAllocationGroup(
+        clusterId,
+        group,
+        failedGroups.get(resourceKey) ?? [],
+        observedAt
+      );
       snapshotChanges += result.snapshotChanges;
       failuresProcessed += result.failuresProcessed;
       recoveriesProcessed += result.recoveriesProcessed;
@@ -342,15 +366,19 @@ export class NomadService {
     return { snapshotChanges, failuresProcessed, recoveriesProcessed };
   }
 
-  private async processAllocationGroup(clusterId: string, allocations: NomadAllocation[], observedAt: Date) {
+  private async processAllocationGroup(
+    clusterId: string,
+    allocations: NomadAllocation[],
+    failedAllocations: NomadAllocation[],
+    observedAt: Date
+  ) {
     const representative = this.selectAllocationRepresentative(allocations);
     const identity = getNomadAllocationLogicalIdentity(representative);
     const runningAllocation = this.selectMostRecentAllocation(
       allocations.filter(allocation => this.allocationState(allocation) === "RUNNING")
     );
     const failedAllocation = this.selectMostRecentAllocation(
-      allocations.filter(allocation =>
-        this.allocationState(allocation) === "FAILED" &&
+      failedAllocations.filter(allocation =>
         String(allocation.DesiredStatus ?? "").toUpperCase() !== "STOP"
       )
     );
@@ -444,12 +472,25 @@ export class NomadService {
       };
     }
 
-    // Do not resolve ALLOCATION_FAILED merely because the newest state is
-    // PENDING/COMPLETE/LOST/etc. Recovery requires a RUNNING replacement.
+    const recoveredIncidentIds = new Set<string>();
+    const resolvedCurrent = await this.alerting.processRecovery({
+      fingerprint,
+      detectedAt: observedAt
+    });
+    if (resolvedCurrent) recoveredIncidentIds.add(resolvedCurrent.publicId);
+
+    for (const legacyFingerprint of legacyFingerprints) {
+      const resolvedLegacy = await this.alerting.processRecovery({
+        fingerprint: legacyFingerprint,
+        detectedAt: observedAt
+      });
+      if (resolvedLegacy) recoveredIncidentIds.add(resolvedLegacy.publicId);
+    }
+
     return {
       snapshotChanges: snapshot.changed ? 1 : 0,
       failuresProcessed: 0,
-      recoveriesProcessed: 0
+      recoveriesProcessed: recoveredIncidentIds.size
     };
   }
 

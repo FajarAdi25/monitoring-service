@@ -48,7 +48,7 @@ export class AlertingWorker {
 
         await this.notifier.send({ kind, incident });
 
-        const regularNextNotificationAt = new Date(now.getTime() + this.openReminderIntervalMs);
+        const regularNextNotificationAt = new Date(now.getTime() + this.getReminderIntervalMs(incident));
         const nextNotificationAt = incident.postponeUntil !== null
           && incident.postponeUntil.getTime() > now.getTime()
           ? incident.postponeUntil
@@ -64,5 +64,11 @@ export class AlertingWorker {
         console.error(`Failed to send alert for incident ${incident.publicId}`, error);
       }
     }
+  }
+
+  private getReminderIntervalMs(incident: { severity: string; acknowledgedAt: Date | null }): number {
+    if (incident.acknowledgedAt !== null) return 3 * 60 * 1000;
+    if (incident.severity === "CRITICAL") return 60 * 1000;
+    return 5 * 60 * 1000;
   }
 }
