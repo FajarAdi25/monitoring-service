@@ -23,7 +23,7 @@ export class MonitoringCurrentStateRepository {
     if (filters.to) qb.andWhere("current.last_checked_at <= :to", { to: filters.to });
 
     return qb
-      .orderBy("current.last_checked_at", "DESC")
+      .orderBy("current.lastCheckedAt", "DESC")
       .addOrderBy("current.id", "DESC")
       .take(filters.limit)
       .getMany();
@@ -56,7 +56,7 @@ export class MonitoringCurrentStateRepository {
     const rawRows = await qb.getRawMany<{ resourceType: string; state: string; count: string }>();
 
     const latestQb = this.repository.createQueryBuilder("current")
-      .select("MAX(current.last_checked_at)", "lastCheckedAt")
+      .select("MAX(current.lastCheckedAt)", "lastCheckedAt")
       .where("current.source = :source", { source: input.source });
 
     if (input.clusterId) {
