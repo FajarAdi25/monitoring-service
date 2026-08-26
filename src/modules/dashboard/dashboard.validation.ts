@@ -71,13 +71,13 @@ export interface DashboardResolvedFilters {
   limit: number;
 }
 
-export function parseDashboardOverviewQuery(query: Record<string, unknown>): { cluster?: string; from?: Date; to?: Date } {
+export function parseDashboardOverviewQuery(query: Record<string, unknown>): { cluster?: string; site?: string; from?: Date; to?: Date } {
   const from = date(query.from, "from");
   const to = date(query.to, "to");
   if (from && to && from.getTime() > to.getTime()) {
     throw new AppError(400, "INVALID_QUERY", "from must be earlier than or equal to to.");
   }
-  return { cluster: one(query.cluster), from, to };
+  return { cluster: one(query.cluster), site: one(query.site), from, to };
 }
 
 export function parseDashboardRecentQuery(query: Record<string, unknown>): DashboardRecentFilters {

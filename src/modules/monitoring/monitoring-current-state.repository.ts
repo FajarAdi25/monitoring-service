@@ -10,9 +10,11 @@ export class MonitoringCurrentStateRepository {
   }
 
   async list(filters: MonitoringCurrentStateFilters): Promise<MonitoringCurrentStateEntity[]> {
-    const qb = this.repository.createQueryBuilder("current");
+    const qb = this.repository.createQueryBuilder("current")
+      .leftJoin("clusters", "cluster", "cluster.cluster_id = current.cluster_id");
 
     if (filters.clusterId) qb.andWhere("current.cluster_id = :clusterId", { clusterId: filters.clusterId });
+    if (filters.site) qb.andWhere("cluster.site = :site", { site: filters.site });
     if (filters.source) qb.andWhere("current.source = :source", { source: filters.source });
     if (filters.resourceType) qb.andWhere("current.resource_type = :resourceType", { resourceType: filters.resourceType });
     if (filters.resourceKey) qb.andWhere("current.resource_key = :resourceKey", { resourceKey: filters.resourceKey });
@@ -29,6 +31,7 @@ export class MonitoringCurrentStateRepository {
   async aggregateByState(input: {
     source: string;
     clusterId?: string;
+    site?: string;
   }): Promise<{
     rows: Array<{ resourceType: string; state: string; count: number }>;
     lastCheckedAt: Date | null;
@@ -42,6 +45,9 @@ export class MonitoringCurrentStateRepository {
     if (input.clusterId) {
       qb.andWhere("current.cluster_id = :clusterId", { clusterId: input.clusterId });
     }
+    if (input.site) {
+      qb.andWhere("cluster.site = :site", { site: input.site });
+    }
 
     qb.groupBy("current.resource_type")
       .addGroupBy("current.state");
@@ -54,6 +60,10 @@ export class MonitoringCurrentStateRepository {
 
     if (input.clusterId) {
       latestQb.andWhere("current.cluster_id = :clusterId", { clusterId: input.clusterId });
+    }
+    if (input.site) {
+      latestQb.leftJoin("clusters", "cluster", "cluster.cluster_id = current.cluster_id")
+        .andWhere("cluster.site = :site", { site: input.site });
     }
 
     const latest = await latestQb.getRawOne<{ lastCheckedAt: Date | string | null }>();

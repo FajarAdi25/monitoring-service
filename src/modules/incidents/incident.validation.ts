@@ -42,6 +42,7 @@ function enumValue<T extends Record<string, string>>(value: unknown, enumObject:
 export function parseIncidentListFilters(query: Record<string, unknown>): IncidentListFilters {
   return {
     cluster: one(query.cluster),
+    site: one(query.site),
     source: one(query.source),
     type: one(query.type),
     severity: enumValue(query.severity, IncidentSeverity, "severity"),

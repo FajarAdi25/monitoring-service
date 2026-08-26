@@ -23,6 +23,7 @@ export class MonitoringCurrentStateService {
 
     const items = await this.repository.list({
       clusterId: stringQuery(query.cluster),
+      site: stringQuery(query.site),
       source: stringQuery(query.source),
       resourceType: stringQuery(query.resourceType),
       resourceKey: stringQuery(query.resourceKey),

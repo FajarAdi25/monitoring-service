@@ -65,9 +65,11 @@ export class IncidentRepository {
 
   async list(filters: IncidentListFilters): Promise<{ items: IncidentEntity[]; total: number }> {
     const qb = this.repository.createQueryBuilder("incident")
-      .leftJoinAndSelect("incident.resolutionTime", "resolutionTime");
+      .leftJoinAndSelect("incident.resolutionTime", "resolutionTime")
+      .leftJoin("clusters", "cluster", "cluster.cluster_id = incident.cluster_id");
 
     if (filters.cluster) qb.andWhere("incident.cluster_id = :cluster", { cluster: filters.cluster });
+    if (filters.site) qb.andWhere("cluster.site = :site", { site: filters.site });
     if (filters.source) qb.andWhere("incident.source = :source", { source: filters.source });
     if (filters.type) qb.andWhere("incident.type = :type", { type: filters.type });
     if (filters.severity) qb.andWhere("incident.severity = :severity", { severity: filters.severity });
@@ -150,7 +152,7 @@ export class IncidentRepository {
     return { items, total };
   }
 
-  async countSummary(input: { clusterId?: string; from?: Date; to?: Date }, now = new Date()): Promise<{
+  async countSummary(input: { clusterId?: string; site?: string; from?: Date; to?: Date }, now = new Date()): Promise<{
     activeTotal: number;
     acknowledged: number;
     unacknowledged: number;
@@ -171,25 +173,30 @@ export class IncidentRepository {
     );
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const activeQb = this.repository.createQueryBuilder("i")
+    const activeQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.OPEN });
-    const acknowledgedQb = this.repository.createQueryBuilder("i")
+    const acknowledgedQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.OPEN })
       .andWhere("i.acknowledged_at IS NOT NULL");
-    const unacknowledgedQb = this.repository.createQueryBuilder("i")
+    const unacknowledgedQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.OPEN })
       .andWhere("i.acknowledged_at IS NULL");
-    const postponedQb = this.repository.createQueryBuilder("i")
+    const postponedQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.OPEN })
       .andWhere("i.postpone_until IS NOT NULL")
       .andWhere("i.postpone_until > :now", { now });
-    const resolvedTodayQb = this.repository.createQueryBuilder("i")
+    const resolvedTodayQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.RESOLVED })
       .andWhere("i.resolved_at >= :start", { start: startOfToday });
-    const resolvedLast24Qb = this.repository.createQueryBuilder("i")
+    const resolvedLast24Qb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.RESOLVED })
       .andWhere("i.resolved_at >= :start", { start: last24Hours });
 
+    if (input.site) {
+      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+        qb.andWhere("cluster.site = :site", { site: input.site });
+      }
+    }
     if (input.clusterId) {
       for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
         qb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });
@@ -215,15 +222,19 @@ export class IncidentRepository {
       resolvedLast24Qb.getCount()
     ]);
 
-    const severityQb = this.repository.createQueryBuilder("i")
+    const severityQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .select("i.severity", "key")
       .addSelect("COUNT(*)", "count")
       .where("i.status = :s", { s: IncidentStatus.OPEN });
-    const typeQb = this.repository.createQueryBuilder("i")
+    const typeQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .select("i.type", "key")
       .addSelect("COUNT(*)", "count")
       .where("i.status = :s", { s: IncidentStatus.OPEN });
 
+    if (input.site) {
+      severityQb.andWhere("cluster.site = :site", { site: input.site });
+      typeQb.andWhere("cluster.site = :site", { site: input.site });
+    }
     if (input.clusterId) {
       severityQb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });
       typeQb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });

@@ -25,14 +25,14 @@ export class DashboardService {
 
   async overview(query: Record<string, unknown>) {
     const filters = parseDashboardOverviewQuery(query);
-    const nomad = await this.nomadCurrentSummary(filters.cluster);
+    const nomad = await this.nomadCurrentSummary(filters.cluster, filters.site);
 
     return { nomad };
   }
 
   async health(query: Record<string, unknown>) {
     const filters = parseDashboardOverviewQuery(query);
-    const nomad = await this.nomadCurrentSummary(filters.cluster);
+    const nomad = await this.nomadCurrentSummary(filters.cluster, filters.site);
     const issues = {
       nodesDown: nomad.nodes.down,
       driversUnhealthy: nomad.drivers.unhealthy,
@@ -53,7 +53,7 @@ export class DashboardService {
 
   async summary(query: Record<string, unknown>) {
     const filters = parseDashboardOverviewQuery(query);
-    const result = await this.incidents.countSummary({ clusterId: filters.cluster, from: filters.from, to: filters.to });
+    const result = await this.incidents.countSummary({ clusterId: filters.cluster, site: filters.site, from: filters.from, to: filters.to });
 
     return {
       open: {
@@ -112,10 +112,11 @@ export class DashboardService {
     };
   }
 
-  private async nomadCurrentSummary(clusterId?: string) {
+  private async nomadCurrentSummary(clusterId?: string, site?: string) {
     const aggregate = await this.currentStates.aggregateByState({
       source: "NOMAD",
-      clusterId
+      clusterId,
+      site
     });
 
     const count = (resourceType: string, state?: string): number =>
