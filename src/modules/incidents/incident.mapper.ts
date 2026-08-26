@@ -16,7 +16,7 @@ function clusterFields(metadata: ClusterMetadata) {
     clusterName: metadata.clusterName,
     site: metadata.site,
     appName: metadata.appName,
-    env: metadata.env
+    env: metadata.env,
   };
 }
 
@@ -24,24 +24,33 @@ function userRef(
   id: string | null,
   name: string | null,
   username: string | null,
-  currentUser?: User
-): { id: string | number; name: string | null; username: string | null } | null {
+  currentUser?: User,
+): {
+  id: string | number;
+  name: string | null;
+  username: string | null;
+} | null {
   if (!id) return null;
   const sameCurrentUser = currentUser?.id === id ? currentUser : undefined;
   return {
     id: serializeId(id) as string | number,
     name: name ?? sameCurrentUser?.name ?? null,
-    username: username ?? sameCurrentUser?.username ?? null
+    username: username ?? sameCurrentUser?.username ?? null,
   };
 }
 
 function isPostponed(entity: IncidentEntity, now = new Date()): boolean {
-  return entity.status === IncidentStatus.OPEN
-    && entity.postponeUntil !== null
-    && entity.postponeUntil.getTime() > now.getTime();
+  return (
+    entity.status === IncidentStatus.OPEN &&
+    entity.postponeUntil !== null &&
+    entity.postponeUntil.getTime() > now.getTime()
+  );
 }
 
-export function mapIncidentListItem(entity: IncidentEntity, metadata: ClusterMetadata) {
+export function mapIncidentListItem(
+  entity: IncidentEntity,
+  metadata: ClusterMetadata,
+) {
   return {
     id: entity.publicId,
     ...clusterFields(metadata),
@@ -50,22 +59,28 @@ export function mapIncidentListItem(entity: IncidentEntity, metadata: ClusterMet
     severity: entity.severity,
     status: entity.status,
     acknowledged: entity.acknowledgedAt !== null,
+    acknowledgedAt: entity.acknowledgedAt,
     postponed: isPostponed(entity),
+    postponedAt: entity.postponedAt,
     postponeUntil: entity.postponeUntil,
     resource: {
       type: entity.resourceType,
       id: entity.resourceKey,
-      name: entity.resourceName
+      name: entity.resourceName,
     },
     message: entity.message,
     openedAt: entity.openedAt,
     lastDetectedAt: entity.lastDetectedAt,
     resolvedAt: entity.resolvedAt,
-    durationSeconds: entity.resolutionTime?.durationSeconds ?? null
+    durationSeconds: entity.resolutionTime?.durationSeconds ?? null,
   };
 }
 
-export function mapIncidentDetail(entity: IncidentEntity, metadata: ClusterMetadata, currentUser?: User) {
+export function mapIncidentDetail(
+  entity: IncidentEntity,
+  metadata: ClusterMetadata,
+  currentUser?: User,
+) {
   return {
     id: entity.publicId,
     ...clusterFields(metadata),
@@ -76,7 +91,7 @@ export function mapIncidentDetail(entity: IncidentEntity, metadata: ClusterMetad
     resource: {
       type: entity.resourceType,
       id: entity.resourceKey,
-      name: entity.resourceName
+      name: entity.resourceName,
     },
     message: entity.message,
     context: entity.contextJson,
@@ -89,9 +104,9 @@ export function mapIncidentDetail(entity: IncidentEntity, metadata: ClusterMetad
         entity.acknowledgedBy,
         entity.acknowledgedByUserName,
         entity.acknowledgedByUsername,
-        currentUser
+        currentUser,
       ),
-      note: entity.acknowledgementNote
+      note: entity.acknowledgementNote,
     },
     postpone: {
       postponed: isPostponed(entity),
@@ -100,17 +115,20 @@ export function mapIncidentDetail(entity: IncidentEntity, metadata: ClusterMetad
         entity.postponedBy,
         entity.postponedByUserName,
         entity.postponedByUsername,
-        currentUser
+        currentUser,
       ),
       postponeUntil: entity.postponeUntil,
-      remark: entity.postponeRemark
+      remark: entity.postponeRemark,
     },
     resolvedAt: entity.resolvedAt,
-    durationSeconds: entity.resolutionTime?.durationSeconds ?? null
+    durationSeconds: entity.resolutionTime?.durationSeconds ?? null,
   };
 }
 
-export function mapAcknowledgeResponse(entity: IncidentEntity, currentUser?: User) {
+export function mapAcknowledgeResponse(
+  entity: IncidentEntity,
+  currentUser?: User,
+) {
   return {
     id: entity.publicId,
     status: entity.status,
@@ -120,13 +138,16 @@ export function mapAcknowledgeResponse(entity: IncidentEntity, currentUser?: Use
       entity.acknowledgedBy,
       entity.acknowledgedByUserName,
       entity.acknowledgedByUsername,
-      currentUser
+      currentUser,
     ),
-    acknowledgementNote: entity.acknowledgementNote
+    acknowledgementNote: entity.acknowledgementNote,
   };
 }
 
-export function mapPostponeResponse(entity: IncidentEntity, currentUser?: User) {
+export function mapPostponeResponse(
+  entity: IncidentEntity,
+  currentUser?: User,
+) {
   return {
     id: entity.publicId,
     status: entity.status,
@@ -136,10 +157,10 @@ export function mapPostponeResponse(entity: IncidentEntity, currentUser?: User) 
       entity.postponedBy,
       entity.postponedByUserName,
       entity.postponedByUsername,
-      currentUser
+      currentUser,
     ),
     postponeUntil: entity.postponeUntil,
     postponeRemark: entity.postponeRemark,
-    nextNotificationAt: entity.nextNotificationAt
+    nextNotificationAt: entity.nextNotificationAt,
   };
 }
