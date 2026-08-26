@@ -37,6 +37,7 @@ export class MonitoringCurrentStateRepository {
     lastCheckedAt: Date | null;
   }> {
     const qb = this.repository.createQueryBuilder("current")
+      .leftJoin("clusters", "cluster", "cluster.cluster_id = current.cluster_id")
       .select("current.resource_type", "resourceType")
       .addSelect("current.state", "state")
       .addSelect("COUNT(*)", "count")
