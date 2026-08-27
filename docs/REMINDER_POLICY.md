@@ -22,3 +22,6 @@ Configuration:
 ```env
 ALERT_REMINDER_INTERVAL_MS=60000
 ```
+
+
+SSL certificate expiry incidents (`type=SSL_CERTIFICATE_EXPIRING`) use a 24-hour reminder interval while they remain OPEN. A renewed certificate with more than 30 days remaining resolves the incident and stops further reminders.

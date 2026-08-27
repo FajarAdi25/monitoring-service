@@ -1,6 +1,24 @@
-# Monitoring Service v2.0.0
+# Monitoring Service v2.4.0
 
-Node.js + TypeScript + TypeORM + MySQL monitoring service for Nomad telemetry, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
+Node.js + TypeScript + TypeORM + MySQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
+
+## SSL Alert Webhook Context
+
+For `SSL_CERTIFICATE_EXPIRING` incidents, the webhook payload includes `incident.contextJson` with the SSL inspection context already stored on the incident:
+
+```json
+{
+  "endpoint": "https://cluster.example",
+  "validFrom": "2026-01-01T00:00:00.000Z",
+  "expiresAt": "2026-09-15T00:00:00.000Z",
+  "daysRemaining": 19,
+  "subjectCn": "cluster.example",
+  "issuerCn": "Example CA",
+  "certificateFingerprint256": "..."
+}
+```
+
+Non-SSL incident webhook payloads are unchanged.
 
 ## Current incident lifecycle
 
@@ -55,7 +73,7 @@ Current local Docker mapping is `localhost:3001 -> container:3002`. MySQL and Te
 docker compose --env-file .env.docker.local -f compose.local.yml up -d --build
 ```
 
-For an existing database, run `npm run db:migrate`. v2.0.0 adds the schema-only `clusters` registry migration. The migration inserts no cluster rows; production cluster records are provisioned manually in MySQL.
+For an existing database, run `npm run db:migrate`. SSL monitoring is enabled per cluster through `clusters.ssl_monitoring`. Only clusters with `ssl_monitoring = true` are checked for TLS certificate expiry.
 
 ## Important environment variables
 
@@ -76,6 +94,58 @@ MONITORING_BASIC_AUTH_PASSWORD=replace-with-a-strong-random-password
 ```
 
 `NOMAD_PULL_CRON="*/15 * * * * *"` means one pull every 15 seconds. `NomadPullWorker` keeps both `noOverlap: true` and its own `running` guard.
+
+## SSL certificate expiry monitoring
+
+SSL certificate monitoring is opt-in per cluster through the `clusters.ssl_monitoring` flag. The migration defaults the flag to `false`, so existing clusters are not monitored until explicitly enabled.
+
+```sql
+UPDATE clusters
+SET ssl_monitoring = 1
+WHERE cluster_id = <cluster_id>;
+```
+
+The worker inspects the TLS certificate presented by the cluster `url` once on service startup and then every 24 hours. If the certificate has 30 days or less remaining, it creates or refreshes an `OPEN` incident with source `SSL`, type `SSL_CERTIFICATE_EXPIRING`, and severity `WARNING`. The existing alert webhook sends the INITIAL notification and then one REMINDER every 24 hours. When a renewed certificate has more than 30 days remaining, the incident is resolved and the existing RESOLVED webhook is sent.
+
+The certificate inspection reads the peer certificate directly from the TLS handshake and does not require the HTTP response body. Trust-chain verification is disabled for this inspection so the expiry date can still be read from internally issued certificates.
+
+## SSL monitoring API
+
+```text
+GET /api/v1/monitoring/ssl
+```
+
+The endpoint returns the latest persisted SSL inspection for each monitored cluster. `status` is calculated from `expiresAt` when the request is served:
+
+- `EXPIRED`: the certificate expiry time has passed.
+- `EXPIRING_SOON`: the certificate is still valid and has 30 days or less remaining.
+- `VALID`: the certificate has more than 30 days remaining.
+
+Example response:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "1",
+      "clusterId": "1",
+      "clusterName": "cluster-a",
+      "site": "site-a",
+      "appName": "app-a",
+      "env": "PRODUCTION",
+      "status": "EXPIRING_SOON",
+      "validFrom": "2026-06-01T00:00:00.000Z",
+      "expiresAt": "2026-09-15T00:00:00.000Z",
+      "daysRemaining": 19,
+      "subjectCn": "example.internal",
+      "issuerCn": "Internal CA",
+      "certificateFingerprint256": "...",
+      "lastCheckedAt": "2026-08-27T06:00:00.000Z"
+    }
+  ]
+}
+```
 
 ## Incident API
 

@@ -11,6 +11,7 @@ export interface ClusterMetadata {
 
 export interface ClusterRepositoryPort {
   findAll(): Promise<ClusterEntity[]>;
+  findSslMonitoringEnabled(): Promise<ClusterEntity[]>;
   findById(clusterId: string): Promise<ClusterEntity | null>;
   findMetadataById(clusterId: string): Promise<ClusterMetadata | null>;
   findMetadataByIds(clusterIds: readonly string[]): Promise<Map<string, ClusterMetadata>>;

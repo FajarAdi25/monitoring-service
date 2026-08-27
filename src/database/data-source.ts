@@ -1,3 +1,4 @@
+// Version: 2.2.0
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { env } from "../config/env";
@@ -6,6 +7,7 @@ import { IncidentEntity } from "../modules/incidents/incident.entity";
 import { ResolutionTimeEntity } from "../modules/incidents/resolution-time.entity";
 import { MonitoringCurrentStateEntity } from "../modules/monitoring/monitoring-current-state.entity";
 import { MonitoringSnapshotEntity } from "../modules/monitoring/monitoring-snapshot.entity";
+import { SslMonitoringEntity } from "../modules/ssl-certificate/ssl-monitoring.entity";
 import { CreateIncidents1786680000000 } from "./migrations/1786680000000-CreateIncidents";
 import { CreateMonitoringSnapshots1786680100000 } from "./migrations/1786680100000-CreateMonitoringSnapshots";
 import { CreateMonitoringCurrentStates1786680200000 } from "./migrations/1786680200000-CreateMonitoringCurrentStates";
@@ -17,6 +19,8 @@ import { NormalizeNomadIncidentSeverity1786680700000 } from "./migrations/178668
 import { AddIncidentUserIdentity1786680800000 } from "./migrations/1786680800000-AddIncidentUserIdentity";
 import { CreateClusters1786680900000 } from "./migrations/1786680900000-CreateClusters";
 import { CreateResolutionTime1786681000000 } from "./migrations/1786681000000-CreateResolutionTime";
+import { AddSslMonitoringToClusters1786681100000 } from "./migrations/1786681100000-AddSslMonitoringToClusters";
+import { CreateSslMonitoring1786681200000 } from "./migrations/1786681200000-CreateSslMonitoring";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -31,6 +35,7 @@ export const AppDataSource = new DataSource({
     ResolutionTimeEntity,
     MonitoringSnapshotEntity,
     MonitoringCurrentStateEntity,
+    SslMonitoringEntity,
   ],
   migrations: [
     CreateIncidents1786680000000,
@@ -44,6 +49,8 @@ export const AppDataSource = new DataSource({
     AddIncidentUserIdentity1786680800000,
     CreateClusters1786680900000,
     CreateResolutionTime1786681000000,
+    AddSslMonitoringToClusters1786681100000,
+    CreateSslMonitoring1786681200000,
   ],
   synchronize: false,
   logging: false,

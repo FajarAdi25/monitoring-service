@@ -25,6 +25,9 @@ export class ClusterEntity {
   @Column({ type: "varchar", length: 512 })
   token!: string;
 
+  @Column({ name: "ssl_monitoring", type: "boolean", default: false })
+  sslMonitoring!: boolean;
+
   @CreateDateColumn({ name: "created_at", type: "timestamp", precision: 3 })
   createdAt!: Timestamp;
 

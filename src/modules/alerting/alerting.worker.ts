@@ -66,7 +66,8 @@ export class AlertingWorker {
     }
   }
 
-  private getReminderIntervalMs(incident: { severity: string; acknowledgedAt: Date | null }): number {
+  private getReminderIntervalMs(incident: { type: string; severity: string; acknowledgedAt: Date | null }): number {
+    if (incident.type === "SSL_CERTIFICATE_EXPIRING") return 24 * 60 * 60 * 1000;
     if (incident.acknowledgedAt !== null) return 3 * 60 * 1000;
     if (incident.severity === "CRITICAL") return 60 * 1000;
     return 5 * 60 * 1000;

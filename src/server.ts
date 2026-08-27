@@ -3,6 +3,7 @@ import { env } from "./config/env";
 import { AppDataSource } from "./database/data-source";
 import { createAlertingModule } from "./modules/alerting/alerting.module";
 import { createNomadModule } from "./modules/nomad/nomad.module";
+import { createSslCertificateModule } from "./modules/ssl-certificate/ssl-certificate.module";
 
 async function bootstrap(): Promise<void> {
   await AppDataSource.initialize();
@@ -22,11 +23,20 @@ async function bootstrap(): Promise<void> {
     tlsCaFile: env.nomad.tlsCaFile
   });
 
+  const sslCertificate = createSslCertificateModule(
+    AppDataSource,
+    alerting.service,
+    env.nomad.requestTimeoutMs
+  );
+
   const app = createApp({ nomadService: nomad.service });
   const server = app.listen(env.appPort, () => {
     console.log(`Monitoring Service listening on port ${env.appPort}`);
     alerting.worker.start();
     console.log(`Alerting worker active; poll=${env.alerting.pollIntervalMs}ms; openReminder=${env.alerting.openReminderIntervalMs}ms`);
+
+    sslCertificate.worker.start();
+    console.log("SSL certificate monitoring active for clusters with ssl_monitoring=true; check interval=24h; expiry threshold=30d");
 
     if (env.nomad.enabled) {
       nomad.worker.start();
@@ -38,6 +48,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = async (): Promise<void> => {
     alerting.worker.stop();
+    sslCertificate.worker.stop();
     nomad.worker.stop();
     server.close();
     if (AppDataSource.isInitialized) {

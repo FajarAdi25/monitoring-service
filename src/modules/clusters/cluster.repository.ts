@@ -14,6 +14,13 @@ export class ClusterRepository implements ClusterRepositoryPort {
     return this.repository.find({ order: { clusterId: "ASC" } });
   }
 
+  findSslMonitoringEnabled(): Promise<ClusterEntity[]> {
+    return this.repository.find({
+      where: { sslMonitoring: true },
+      order: { clusterId: "ASC" }
+    });
+  }
+
   findById(clusterId: string): Promise<ClusterEntity | null> {
     return this.repository.findOne({ where: { clusterId } });
   }

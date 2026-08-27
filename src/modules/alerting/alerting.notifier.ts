@@ -1,14 +1,21 @@
-import type { ClusterMetadata, ClusterRepositoryPort } from "../clusters/cluster.types";
+// Version: 2.4.0
+import type {
+  ClusterMetadata,
+  ClusterRepositoryPort,
+} from "../clusters/cluster.types";
 import type { AlertNotification } from "./alerting.types";
 
 export interface AlertNotifier {
   send(notification: AlertNotification): Promise<void>;
 }
 
-function toWebhookPayload(notification: AlertNotification, cluster: ClusterMetadata) {
+function toWebhookPayload(
+  notification: AlertNotification,
+  cluster: ClusterMetadata,
+) {
   const { incident, kind } = notification;
   return {
-    event: "INCIDENT_ALERT",
+    event: `${incident.source === "SSL" ? "SSL_EXPIRING_ALERT" : "INCIDENT_ALERT"}`,
     kind,
     incident: {
       id: incident.publicId,
@@ -19,18 +26,23 @@ function toWebhookPayload(notification: AlertNotification, cluster: ClusterMetad
       resource: {
         type: incident.resourceType,
         key: incident.resourceKey,
-        name: incident.resourceName
+        name: incident.resourceName,
       },
       message: incident.message,
+      ...(incident.source === "SSL" &&
+      incident.type === "SSL_CERTIFICATE_EXPIRING"
+        ? { contextJson: incident.contextJson }
+        : {}),
       clusterName: cluster.clusterName,
       site: cluster.site,
       appName: cluster.appName,
       env: cluster.env,
       openedAt: incident.openedAt.toISOString(),
       resolvedAt: incident.resolvedAt?.toISOString() ?? null,
-      reminderCount: kind === "REMINDER"
-        ? incident.reminderCount + 1
-        : incident.reminderCount,
+      reminderCount:
+        kind === "REMINDER"
+          ? incident.reminderCount + 1
+          : incident.reminderCount,
       acknowledgement: {
         status: incident.acknowledgedAt !== null,
         ...(incident.acknowledgedAt !== null
@@ -38,12 +50,12 @@ function toWebhookPayload(notification: AlertNotification, cluster: ClusterMetad
               by: {
                 id: incident.acknowledgedBy,
                 name: incident.acknowledgedByUserName,
-                username: incident.acknowledgedByUsername
+                username: incident.acknowledgedByUsername,
               },
               at: incident.acknowledgedAt.toISOString(),
-              note: incident.acknowledgementNote
+              note: incident.acknowledgementNote,
             }
-          : {})
+          : {}),
       },
       postpone: {
         status: incident.postponedAt !== null,
@@ -52,25 +64,29 @@ function toWebhookPayload(notification: AlertNotification, cluster: ClusterMetad
               by: {
                 id: incident.postponedBy,
                 name: incident.postponedByUserName,
-                username: incident.postponedByUsername
+                username: incident.postponedByUsername,
               },
               at: incident.postponedAt.toISOString(),
               until: incident.postponeUntil?.toISOString() ?? null,
-              remark: incident.postponeRemark
+              remark: incident.postponeRemark,
             }
-          : {})
-      }
-    }
+          : {}),
+      },
+    },
   };
 }
 
 async function metadataFor(
   clusters: ClusterRepositoryPort,
-  notification: AlertNotification
+  notification: AlertNotification,
 ): Promise<ClusterMetadata> {
-  const cluster = await clusters.findMetadataById(notification.incident.clusterId);
+  const cluster = await clusters.findMetadataById(
+    notification.incident.clusterId,
+  );
   if (!cluster) {
-    throw new Error(`Cluster metadata missing for cluster ${notification.incident.clusterId}.`);
+    throw new Error(
+      `Cluster metadata missing for cluster ${notification.incident.clusterId}.`,
+    );
   }
   return cluster;
 }
@@ -80,7 +96,9 @@ export class ConsoleAlertNotifier implements AlertNotifier {
 
   async send(notification: AlertNotification): Promise<void> {
     const cluster = await metadataFor(this.clusters, notification);
-    console.log(`[ALERT:${notification.kind}] ${JSON.stringify(toWebhookPayload(notification, cluster))}`);
+    console.log(
+      `[ALERT:${notification.kind}] ${JSON.stringify(toWebhookPayload(notification, cluster))}`,
+    );
   }
 }
 
@@ -88,7 +106,7 @@ export class HttpWebhookAlertNotifier implements AlertNotifier {
   constructor(
     private readonly clusters: ClusterRepositoryPort,
     private readonly webhookUrl: string,
-    private readonly timeoutMs = 5000
+    private readonly timeoutMs = 5000,
   ) {}
 
   async send(notification: AlertNotification): Promise<void> {
@@ -101,7 +119,7 @@ export class HttpWebhookAlertNotifier implements AlertNotifier {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(toWebhookPayload(notification, cluster)),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       if (!response.ok) {

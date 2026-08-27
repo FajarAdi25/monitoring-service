@@ -1,3 +1,4 @@
+// Version: 2.3.0
 import express from "express";
 import { AppDataSource } from "./database/data-source";
 import { userMiddleware } from "./common/middleware/user.middleware";
@@ -23,6 +24,9 @@ import { createNomadRouter } from "./modules/nomad/nomad.routes";
 import type { NomadService } from "./modules/nomad/nomad.service";
 import { TelegramDummyWebhookController } from "./modules/webhooks/telegram-dummy.controller";
 import { createWebhookRouter } from "./modules/webhooks/webhook.routes";
+import { SslMonitoringRepository } from "./modules/ssl-certificate/ssl-monitoring.repository";
+import { SslMonitoringService } from "./modules/ssl-certificate/ssl-monitoring.service";
+import { SslMonitoringController } from "./modules/ssl-certificate/ssl-monitoring.controller";
 
 export interface AppDependencies {
   nomadService: NomadService;
@@ -46,6 +50,10 @@ export function createApp(dependencies: AppDependencies) {
   const currentStateService = new MonitoringCurrentStateService(currentStateRepository, clusterRepository);
   const currentStateController = new MonitoringCurrentStateController(currentStateService);
 
+  const sslMonitoringRepository = new SslMonitoringRepository(AppDataSource);
+  const sslMonitoringService = new SslMonitoringService(sslMonitoringRepository, clusterRepository);
+  const sslMonitoringController = new SslMonitoringController(sslMonitoringService);
+
   const dashboardService = new DashboardService(incidentRepository, currentStateRepository, clusterRepository);
   const dashboardController = new DashboardController(dashboardService);
 
@@ -54,7 +62,10 @@ export function createApp(dependencies: AppDependencies) {
 
   app.use("/api/v1/incidents", createIncidentRouter(incidentController));
   app.use("/api/v1/dashboard", createDashboardRouter(dashboardController));
-  app.use("/api/v1/monitoring", createMonitoringRouter(snapshotController, currentStateController));
+  app.use(
+    "/api/v1/monitoring",
+    createMonitoringRouter(snapshotController, currentStateController, sslMonitoringController)
+  );
   app.use("/api/v1/nomad", createNomadRouter(nomadController));
   app.use("/api/v1/webhooks", createWebhookRouter(telegramDummyWebhookController));
 

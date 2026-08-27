@@ -1,3 +1,42 @@
+# v2.4.0 - SSL Alert Webhook Context
+
+- Added `incident.contextJson` to the webhook payload only for `SSL_CERTIFICATE_EXPIRING` incidents.
+- The SSL context contains the existing incident fields: `endpoint`, `validFrom`, `expiresAt`, `daysRemaining`, `subjectCn`, `issuerCn`, and `certificateFingerprint256`.
+- Non-SSL webhook payloads are unchanged.
+- No database migration, worker interval, SSL expiry threshold, alerting lifecycle, or API behavior changes.
+- Updated Monitoring Service and Compose image version to `2.4.0`.
+
+# v2.3.0 - SSL Monitoring API
+
+- Added `GET /api/v1/monitoring/ssl` for the latest persisted SSL certificate inspection per cluster.
+- Added response status classification: `EXPIRED`, `EXPIRING_SOON`, and `VALID`.
+- `EXPIRING_SOON` uses the existing 30-day SSL expiry threshold.
+- SSL status and remaining days are calculated from `expires_at` when the API request is served.
+- Cluster URL and token are not exposed by the endpoint.
+- No database migration, worker interval, SSL threshold, alerting, or incident lifecycle changes.
+- Updated Monitoring Service and Compose image version to `2.3.0`.
+
+# v2.2.0 - SSL Monitoring Persistence
+
+- Added dedicated `ssl_monitoring` table for the latest successful SSL certificate inspection per cluster.
+- Stored existing SSL inspection fields: validity period, days remaining, subject CN, issuer CN, certificate SHA-256 fingerprint, and last checked timestamp.
+- SSL monitoring now upserts the latest successful certificate inspection for each monitored cluster.
+- Added migration `1786681200000-CreateSslMonitoring.ts`.
+- Updated Monitoring Service and Compose image version to `2.2.0`.
+- No SSL threshold, alerting, incident lifecycle, worker interval, or API behavior was changed.
+
+# v2.1.0 - SSL Certificate Expiry Monitoring
+
+- Added `clusters.ssl_monitoring` as an opt-in flag with a default value of `false`.
+- Added daily TLS certificate inspection for clusters with `ssl_monitoring = true`.
+- Added a 30-day certificate expiry threshold. Certificates at or below the threshold create or refresh an `OPEN` `SSL_CERTIFICATE_EXPIRING` incident.
+- SSL certificate expiry incidents use severity `WARNING` and the existing incident alert webhook.
+- Added one INITIAL alert followed by REMINDER alerts every 24 hours while the certificate remains within the expiry threshold.
+- A renewed certificate with more than 30 days remaining resolves the active certificate incident and sends the existing RESOLVED webhook.
+- Certificate validity is read directly from the TLS handshake and does not depend on the HTTP response body.
+- Added migration `1786681100000-AddSslMonitoringToClusters.ts`.
+- Updated Monitoring Service and Compose image version to `2.1.0`.
+
 # v2.0.0 - Database-Driven Multi-Cluster Nomad Monitoring
 
 - Added schema-only `clusters` registry; production cluster rows are provisioned manually and no dummy cluster data is seeded.
