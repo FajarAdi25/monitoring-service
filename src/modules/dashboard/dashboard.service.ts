@@ -184,6 +184,7 @@ export class DashboardService {
     );
 
     return {
+      total: scopedItems.length,
       valid: scopedItems.filter((item) => item.status === "VALID").length,
       expiring: scopedItems.filter((item) => item.status === "EXPIRING_SOON")
         .length,
