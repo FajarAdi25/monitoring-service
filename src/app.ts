@@ -1,4 +1,4 @@
-// Version: 2.3.0
+// Version: 2.5.0
 import express from "express";
 import { AppDataSource } from "./database/data-source";
 import { userMiddleware } from "./common/middleware/user.middleware";
@@ -54,7 +54,12 @@ export function createApp(dependencies: AppDependencies) {
   const sslMonitoringService = new SslMonitoringService(sslMonitoringRepository, clusterRepository);
   const sslMonitoringController = new SslMonitoringController(sslMonitoringService);
 
-  const dashboardService = new DashboardService(incidentRepository, currentStateRepository, clusterRepository);
+  const dashboardService = new DashboardService(
+    incidentRepository,
+    currentStateRepository,
+    clusterRepository,
+    sslMonitoringService
+  );
   const dashboardController = new DashboardController(dashboardService);
 
   const nomadController = new NomadController(dependencies.nomadService);

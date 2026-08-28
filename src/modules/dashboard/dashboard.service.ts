@@ -1,8 +1,10 @@
+// Version: 2.5.0
 import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { IncidentSeverity } from "../incidents/incident.enums";
 import { mapIncidentListItem } from "../incidents/incident.mapper";
 import { IncidentRepository } from "../incidents/incident.repository";
 import { MonitoringCurrentStateRepository } from "../monitoring/monitoring-current-state.repository";
+import { SslMonitoringService } from "../ssl-certificate/ssl-monitoring.service";
 import {
   parseDashboardOverviewQuery,
   parseDashboardRecentQuery,
@@ -20,14 +22,16 @@ export class DashboardService {
   constructor(
     private readonly incidents: IncidentRepository,
     private readonly currentStates: MonitoringCurrentStateRepository,
-    private readonly clusters: ClusterRepositoryPort
+    private readonly clusters: ClusterRepositoryPort,
+    private readonly sslMonitoring: SslMonitoringService
   ) {}
 
   async overview(query: Record<string, unknown>) {
     const filters = parseDashboardOverviewQuery(query);
     const nomad = await this.nomadCurrentSummary(filters.cluster, filters.site);
+    const ssl = await this.sslCurrentSummary(filters.cluster, filters.site);
 
-    return { nomad };
+    return { nomad, ssl };
   }
 
   async health(query: Record<string, unknown>) {
@@ -142,6 +146,20 @@ export class DashboardService {
         blocked: count("EVALUATION", "BLOCKED")
       },
       lastCheckedAt: aggregate.lastCheckedAt?.toISOString() ?? null
+    };
+  }
+
+  private async sslCurrentSummary(clusterId?: string, site?: string) {
+    const items = await this.sslMonitoring.list();
+    const scopedItems = items.filter(item =>
+      (clusterId === undefined || item.clusterId === clusterId)
+      && (site === undefined || item.site === site)
+    );
+
+    return {
+      valid: scopedItems.filter(item => item.status === "VALID").length,
+      expiring: scopedItems.filter(item => item.status === "EXPIRING_SOON").length,
+      expired: scopedItems.filter(item => item.status === "EXPIRED").length
     };
   }
 }

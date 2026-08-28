@@ -1,3 +1,12 @@
+# v2.5.0 - Dashboard SSL Summary
+
+- Added SSL certificate status summary to `GET /api/v1/dashboard/overview`.
+- Added `ssl.valid`, `ssl.expiring`, and `ssl.expired` counters using the existing SSL monitoring classification.
+- `ssl.expiring` maps to the existing `EXPIRING_SOON` status and preserves the existing 30-day expiry threshold.
+- Existing dashboard `cluster` and `site` filters also scope the SSL summary.
+- No database migration, SSL threshold, worker interval, alerting lifecycle, incident lifecycle, or existing Nomad overview behavior changed.
+- Updated Monitoring Service and Compose image version to `2.5.0`.
+
 # v2.4.0 - SSL Alert Webhook Context
 
 - Added `incident.contextJson` to the webhook payload only for `SSL_CERTIFICATE_EXPIRING` incidents.

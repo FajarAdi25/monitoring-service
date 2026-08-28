@@ -1,4 +1,4 @@
-# Monitoring Service v2.4.0
+# Monitoring Service v2.5.0
 
 Node.js + TypeScript + TypeORM + MySQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
 

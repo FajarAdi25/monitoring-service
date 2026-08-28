@@ -1,4 +1,6 @@
-# Dashboard API v2.0.0
+<!-- Version: 2.5.0 -->
+
+# Dashboard API v2.5.0
 
 Dashboard API follows the current lifecycle used by the service:
 
@@ -21,9 +23,10 @@ Optional query:
 
 ```text
 cluster
+site
 ```
 
-The endpoint aggregates `monitoring_current_states`. It is intended for dashboard cards showing the latest Nomad state.
+The endpoint returns the latest Nomad state summary and SSL certificate status summary. SSL status uses the existing SSL monitoring classification: `VALID`, `EXPIRING_SOON`, and `EXPIRED`.
 
 Example:
 
@@ -49,6 +52,11 @@ Example:
         "blocked": 1
       },
       "lastCheckedAt": "2026-08-16T05:20:15.000Z"
+    },
+    "ssl": {
+      "valid": 4,
+      "expiring": 1,
+      "expired": 1
     }
   }
 }

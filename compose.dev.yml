@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: monitoring-service:2.4.0
+    image: monitoring-service:2.5.0
     init: true
     env_file:
       - .env.docker.dev

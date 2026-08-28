@@ -23,7 +23,7 @@ export class SslCertificateService {
     private readonly clusters: ClusterRepositoryPort,
     private readonly client: SslCertificateClient,
     private readonly alerting: AlertingService,
-    private readonly sslMonitoring: SslMonitoringRepository
+    private readonly sslMonitoring: SslMonitoringRepository,
   ) {}
 
   async checkOnce(now = new Date()): Promise<SslCertificateCheckResult> {
@@ -32,7 +32,7 @@ export class SslCertificateService {
       checked: clusters.length,
       expiring: 0,
       healthy: 0,
-      failed: 0
+      failed: 0,
     };
 
     for (const cluster of clusters) {
@@ -51,10 +51,13 @@ export class SslCertificateService {
             subjectCn: certificate.subjectCn,
             issuerCn: certificate.issuerCn,
             certificateFingerprint256: certificate.fingerprint256,
-            lastCheckedAt: now
+            lastCheckedAt: now,
           });
         } catch (error) {
-          console.error(`[SSL:MONITORING] cluster=${cluster.clusterId} persistence failed`, error);
+          console.error(
+            `[SSL:MONITORING] cluster=${cluster.clusterId} persistence failed`,
+            error,
+          );
         }
 
         if (remainingMs <= EXPIRY_THRESHOLD_MS) {
@@ -67,7 +70,11 @@ export class SslCertificateService {
             resourceKey: cluster.clusterId,
             resourceName: cluster.clusterName,
             fingerprint,
-            message: this.buildAlertMessage(cluster, certificate.expiresAt, daysRemaining),
+            message: this.buildAlertMessage(
+              cluster,
+              certificate.expiresAt,
+              daysRemaining,
+            ),
             context: {
               endpoint: cluster.url,
               validFrom: certificate.validFrom.toISOString(),
@@ -75,9 +82,9 @@ export class SslCertificateService {
               daysRemaining,
               subjectCn: certificate.subjectCn,
               issuerCn: certificate.issuerCn,
-              certificateFingerprint256: certificate.fingerprint256
+              certificateFingerprint256: certificate.fingerprint256,
             },
-            detectedAt: now
+            detectedAt: now,
           });
           result.expiring += 1;
         } else {
@@ -86,7 +93,10 @@ export class SslCertificateService {
         }
       } catch (error) {
         result.failed += 1;
-        console.error(`[SSL:CERTIFICATE] cluster=${cluster.clusterId} check failed`, error);
+        console.error(
+          `[SSL:CERTIFICATE] cluster=${cluster.clusterId} check failed`,
+          error,
+        );
       }
     }
 
@@ -95,17 +105,23 @@ export class SslCertificateService {
 
   private createFingerprint(cluster: ClusterEntity): string {
     return createHash("sha256")
-      .update([
-        cluster.clusterId,
-        "SSL",
-        INCIDENT_TYPE,
-        RESOURCE_TYPE,
-        cluster.clusterId
-      ].join("|"))
+      .update(
+        [
+          cluster.clusterId,
+          "SSL",
+          INCIDENT_TYPE,
+          RESOURCE_TYPE,
+          cluster.clusterId,
+        ].join("|"),
+      )
       .digest("hex");
   }
 
-  private buildAlertMessage(cluster: ClusterEntity, expiresAt: Date, daysRemaining: number): string {
+  private buildAlertMessage(
+    cluster: ClusterEntity,
+    expiresAt: Date,
+    daysRemaining: number,
+  ): string {
     if (daysRemaining <= 0) {
       return `SSL certificate for cluster ${cluster.clusterName} expired on ${expiresAt.toISOString()}.`;
     }
