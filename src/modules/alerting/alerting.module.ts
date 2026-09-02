@@ -2,7 +2,10 @@ import type { DataSource } from "typeorm";
 import { ClusterRepository } from "../clusters/cluster.repository";
 import { IncidentRepository } from "../incidents/incident.repository";
 import { IncidentService } from "../incidents/incident.service";
-import { ConsoleAlertNotifier, HttpWebhookAlertNotifier } from "./alerting.notifier";
+import {
+  ConsoleAlertNotifier,
+  HttpWebhookAlertNotifier,
+} from "./alerting.notifier";
 import { HttpIncidentWebhookNotifier } from "./incident-webhook.notifier";
 import { AlertingService } from "./alerting.service";
 import { AlertingWorker } from "./alerting.worker";
@@ -16,21 +19,25 @@ export interface AlertingModuleConfig {
   pollIntervalMs: number;
   openReminderIntervalMs: number;
   webhookUrl?: string;
-  incidentWebhookUrl?: string;
+  relayWebhookUrl?: string;
+  relayWebhookApiKey?: string;
 }
 
 export function createAlertingModule(
   dataSource: DataSource,
-  config: AlertingModuleConfig
+  config: AlertingModuleConfig,
 ): AlertingModule {
   const clusterRepository = new ClusterRepository(dataSource);
   const incidentRepository = new IncidentRepository(dataSource);
-  const incidentService = new IncidentService(incidentRepository, clusterRepository);
-  const incidentWebhook = config.incidentWebhookUrl
+  const incidentService = new IncidentService(
+    incidentRepository,
+    clusterRepository,
+  );
+  const relayWebhook = config.relayWebhookUrl
     ? new HttpIncidentWebhookNotifier(
         clusterRepository,
-        config.incidentWebhookUrl,
-        config.incidentWebhookApiKey,
+        config.relayWebhookUrl,
+        config.relayWebhookApiKey,
       )
     : undefined;
 
@@ -43,13 +50,13 @@ export function createAlertingModule(
       incidentRepository,
       incidentService,
       notifier,
-      incidentWebhook
+      relayWebhook,
     ),
     worker: new AlertingWorker(
       incidentRepository,
       notifier,
       config.pollIntervalMs,
-      config.openReminderIntervalMs
-    )
+      config.openReminderIntervalMs,
+    ),
   };
 }
