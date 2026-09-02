@@ -38,6 +38,8 @@ export const env = {
       process.env.ALERT_REMINDER_INTERVAL_MS ?? 60000,
     ),
     webhookUrl: optional("ALERT_WEBHOOK_URL"),
+    incidentWebhookUrl: optional("INCIDENT_WEBHOOK_URL"),
+    incidentWebhookApiKey: optional("INCIDENT_WEBHOOK_API_KEY"),
   },
   telegramBot: {
     basicAuthUsername: required("MONITORING_BASIC_AUTH_USERNAME"),

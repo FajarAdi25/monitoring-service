@@ -1,3 +1,12 @@
+# 2.5.2
+
+- Added static x-api-key header support for incident webhook delivery using INCIDENT_WEBHOOK_API_KEY environment variable.
+
+# 2.5.1
+
+- Added third party incident webhook delivery for incident.opened and incident.resolved only.
+- Payload fields follow event_type, incident_id, title, description, severity, source_service, detected_at contract.
+
 # v2.5.0 - Dashboard SSL Summary
 
 - Added SSL certificate status summary to `GET /api/v1/dashboard/overview`.

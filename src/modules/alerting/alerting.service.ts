@@ -5,12 +5,14 @@ import { IncidentRepository } from "../incidents/incident.repository";
 import { IncidentService } from "../incidents/incident.service";
 import type { FailureSignal, RecoverySignal } from "./alerting.types";
 import type { AlertNotifier } from "./alerting.notifier";
+import type { IncidentWebhookNotifier } from "./incident-webhook.notifier";
 
 export class AlertingService {
   constructor(
     private readonly incidentRepository: IncidentRepository,
     private readonly incidentService: IncidentService,
-    private readonly notifier: AlertNotifier
+    private readonly notifier: AlertNotifier,
+    private readonly incidentWebhook?: IncidentWebhookNotifier
   ) {}
 
   async processFailure(
@@ -91,7 +93,15 @@ export class AlertingService {
     });
 
     try {
-      return await this.incidentRepository.save(incident);
+      const saved = await this.incidentRepository.save(incident);
+      if (this.incidentWebhook) {
+        try {
+          await this.incidentWebhook.sendOpened(saved);
+        } catch (error) {
+          console.error(`Failed to send incident.opened webhook for incident ${saved.id}`, error);
+        }
+      }
+      return saved;
     } catch (error) {
       if (this.isDuplicateKey(error)) {
         const concurrent = await this.incidentRepository.findOpenByActiveFingerprint(signal.fingerprint);
@@ -113,6 +123,14 @@ export class AlertingService {
     );
 
     if (!incident) return null;
+
+    if (this.incidentWebhook) {
+      try {
+        await this.incidentWebhook.sendResolved(incident);
+      } catch (error) {
+        console.error(`Failed to send incident.resolved webhook for incident ${incident.id}`, error);
+      }
+    }
 
     try {
       await this.notifier.send({ kind: "RESOLVED", incident });
