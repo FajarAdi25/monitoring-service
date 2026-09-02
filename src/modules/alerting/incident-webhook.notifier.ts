@@ -35,10 +35,15 @@ export class HttpIncidentWebhookNotifier implements IncidentWebhookNotifier {
     await this.send(incident, "incident.resolved");
   }
 
-  private async send(incident: IncidentEntity, eventType: string): Promise<void> {
+  private async send(
+    incident: IncidentEntity,
+    eventType: string,
+  ): Promise<void> {
     const cluster = await this.clusters.findMetadataById(incident.clusterId);
     if (!cluster) {
-      throw new Error(`Cluster metadata missing for cluster ${incident.clusterId}.`);
+      throw new Error(
+        `Cluster metadata missing for cluster ${incident.clusterId}.`,
+      );
     }
 
     const controller = new AbortController();
@@ -55,6 +60,9 @@ export class HttpIncidentWebhookNotifier implements IncidentWebhookNotifier {
         signal: controller.signal,
       });
 
+      console.log(
+        `Incident webhook sent for incident ${incident.id} with event type ${eventType}.`,
+      );
       if (!response.ok) {
         throw new Error(`Incident webhook returned HTTP ${response.status}`);
       }
