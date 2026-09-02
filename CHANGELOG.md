@@ -1,3 +1,10 @@
+## v2.5.4 - Relay payload contract alignment
+
+- Updated Relay webhook payload structure to match Relay contract.
+- Added lifecycle event mapping: `incident.opened` and `incident.resolved`.
+- Added incident metadata fields: title, host, description, severity, source_service, and detected_at.
+- No changes to relay delivery tracking, retry worker, incident lifecycle, or reminder notifications.
+
 ## v2.5.3 - Relay lifecycle delivery tracking
 
 - Added relay delivery tracking for OPEN and RESOLVED lifecycle events.

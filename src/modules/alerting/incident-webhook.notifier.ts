@@ -7,10 +7,16 @@ export interface IncidentWebhookNotifier {
   sendResolved(incident: IncidentEntity): Promise<void>;
 }
 
-function payload(incident: IncidentEntity, _appName: string, eventType: string) {
+function payload(incident: IncidentEntity, appName: string, eventType: string) {
   return {
-    incident_id: incident.publicId,
-    status: eventType,
+    event_type: eventType === "OPEN" ? "incident.opened" : "incident.resolved",
+    incident_id: incident.id,
+    title: `${incident.type} - ${appName}`,
+    host: incident.resourceName ? [incident.resourceName] : [],
+    description: incident.message,
+    severity: incident.severity,
+    source_service: appName,
+    detected_at: incident.openedAt,
   };
 }
 
