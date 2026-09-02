@@ -9,6 +9,7 @@ import {
 import { HttpIncidentWebhookNotifier } from "./incident-webhook.notifier";
 import { AlertingService } from "./alerting.service";
 import { AlertingWorker } from "./alerting.worker";
+import { RelayDeliveryRepository } from "./relay/relay-delivery.repository";
 
 export interface AlertingModule {
   service: AlertingService;
@@ -33,6 +34,7 @@ export function createAlertingModule(
     incidentRepository,
     clusterRepository,
   );
+  const relayDeliveryRepository = new RelayDeliveryRepository(dataSource);
   const relayWebhook = config.relayWebhookUrl
     ? new HttpIncidentWebhookNotifier(
         clusterRepository,
@@ -51,12 +53,15 @@ export function createAlertingModule(
       incidentService,
       notifier,
       relayWebhook,
+      relayDeliveryRepository,
     ),
     worker: new AlertingWorker(
       incidentRepository,
       notifier,
       config.pollIntervalMs,
       config.openReminderIntervalMs,
+      relayWebhook,
+      relayDeliveryRepository,
     ),
   };
 }

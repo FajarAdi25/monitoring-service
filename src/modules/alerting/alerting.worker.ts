@@ -1,5 +1,7 @@
 import { IncidentRepository } from "../incidents/incident.repository";
 import type { AlertNotifier } from "./alerting.notifier";
+import type { IncidentWebhookNotifier } from "./incident-webhook.notifier";
+import type { RelayDeliveryRepository } from "./relay/relay-delivery.repository";
 
 export class AlertingWorker {
   private timer: NodeJS.Timeout | null = null;
@@ -9,7 +11,9 @@ export class AlertingWorker {
     private readonly incidentRepository: IncidentRepository,
     private readonly notifier: AlertNotifier,
     private readonly pollIntervalMs: number,
-    private readonly openReminderIntervalMs: number
+    private readonly openReminderIntervalMs: number,
+    private readonly relayWebhook?: IncidentWebhookNotifier,
+    private readonly relayDelivery?: RelayDeliveryRepository
   ) {}
 
   start(): void {
@@ -32,8 +36,30 @@ export class AlertingWorker {
 
     try {
       await this.processOpenNotifications(now);
+      await this.processRelayDelivery(now);
     } finally {
       this.running = false;
+    }
+  }
+
+  private async processRelayDelivery(now: Date): Promise<void> {
+    if (!this.relayDelivery || !this.relayWebhook) return;
+    const deliveries = await this.relayDelivery.findPending(100);
+    for (const delivery of deliveries) {
+      try {
+        const incident = await this.incidentRepository.findById(delivery.incidentId);
+        if (!incident) continue;
+        if (delivery.eventType === "OPEN") await this.relayWebhook.sendOpened(incident);
+        else await this.relayWebhook.sendResolved(incident);
+        delivery.status = "SUCCESS";
+        delivery.lastError = null;
+      } catch (error) {
+        delivery.status = "FAILED";
+        delivery.retryCount += 1;
+        delivery.lastError = error instanceof Error ? error.message : String(error);
+        delivery.nextRetryAt = new Date(now.getTime() + 60000);
+      }
+      await this.relayDelivery.save(delivery);
     }
   }
 

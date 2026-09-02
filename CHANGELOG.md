@@ -1,3 +1,10 @@
+## v2.5.3 - Relay lifecycle delivery tracking
+
+- Added relay delivery tracking for OPEN and RESOLVED lifecycle events.
+- Added retry worker with 1 minute retry interval for failed relay delivery.
+- Cancelled pending OPEN delivery when incident resolves before successful delivery.
+- Reminder notifications remain unchanged and are not sent to Relay.
+
 # 2.5.2
 
 - Added static x-api-key header support for incident webhook delivery using INCIDENT_WEBHOOK_API_KEY environment variable.

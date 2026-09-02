@@ -8,6 +8,7 @@ import { ResolutionTimeEntity } from "../modules/incidents/resolution-time.entit
 import { MonitoringCurrentStateEntity } from "../modules/monitoring/monitoring-current-state.entity";
 import { MonitoringSnapshotEntity } from "../modules/monitoring/monitoring-snapshot.entity";
 import { SslMonitoringEntity } from "../modules/ssl-certificate/ssl-monitoring.entity";
+import { RelayDeliveryEntity } from "../modules/alerting/relay/relay-delivery.entity";
 import { CreateIncidents1786680000000 } from "./migrations/1786680000000-CreateIncidents";
 import { CreateMonitoringSnapshots1786680100000 } from "./migrations/1786680100000-CreateMonitoringSnapshots";
 import { CreateMonitoringCurrentStates1786680200000 } from "./migrations/1786680200000-CreateMonitoringCurrentStates";
@@ -21,6 +22,7 @@ import { CreateClusters1786680900000 } from "./migrations/1786680900000-CreateCl
 import { CreateResolutionTime1786681000000 } from "./migrations/1786681000000-CreateResolutionTime";
 import { AddSslMonitoringToClusters1786681100000 } from "./migrations/1786681100000-AddSslMonitoringToClusters";
 import { CreateSslMonitoring1786681200000 } from "./migrations/1786681200000-CreateSslMonitoring";
+import { CreateRelayDeliveries1786681300000 } from "./migrations/1786681300000-CreateRelayDeliveries";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -36,6 +38,7 @@ export const AppDataSource = new DataSource({
     MonitoringSnapshotEntity,
     MonitoringCurrentStateEntity,
     SslMonitoringEntity,
+    RelayDeliveryEntity,
   ],
   migrations: [
     CreateIncidents1786680000000,
@@ -51,6 +54,7 @@ export const AppDataSource = new DataSource({
     CreateResolutionTime1786681000000,
     AddSslMonitoringToClusters1786681100000,
     CreateSslMonitoring1786681200000,
+    CreateRelayDeliveries1786681300000,
   ],
   synchronize: false,
   logging: false,

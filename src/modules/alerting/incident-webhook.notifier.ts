@@ -7,15 +7,10 @@ export interface IncidentWebhookNotifier {
   sendResolved(incident: IncidentEntity): Promise<void>;
 }
 
-function payload(incident: IncidentEntity, appName: string, eventType: string) {
+function payload(incident: IncidentEntity, _appName: string, eventType: string) {
   return {
-    event_type: eventType,
-    incident_id: incident.id,
-    title: `${incident.type} - ${incident.resourceName ?? ""} - ${appName}`,
-    description: incident.message,
-    severity: incident.severity,
-    source_service: incident.resourceName,
-    detected_at: incident.openedAt,
+    incident_id: incident.publicId,
+    status: eventType,
   };
 }
 
@@ -28,11 +23,11 @@ export class HttpIncidentWebhookNotifier implements IncidentWebhookNotifier {
   ) {}
 
   async sendOpened(incident: IncidentEntity): Promise<void> {
-    await this.send(incident, "incident.opened");
+    await this.send(incident, "OPEN");
   }
 
   async sendResolved(incident: IncidentEntity): Promise<void> {
-    await this.send(incident, "incident.resolved");
+    await this.send(incident, "RESOLVED");
   }
 
   private async send(

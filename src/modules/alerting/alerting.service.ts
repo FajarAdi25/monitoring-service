@@ -6,13 +6,15 @@ import { IncidentService } from "../incidents/incident.service";
 import type { FailureSignal, RecoverySignal } from "./alerting.types";
 import type { AlertNotifier } from "./alerting.notifier";
 import type { IncidentWebhookNotifier } from "./incident-webhook.notifier";
+import type { RelayDeliveryRepository } from "./relay/relay-delivery.repository";
 
 export class AlertingService {
   constructor(
     private readonly incidentRepository: IncidentRepository,
     private readonly incidentService: IncidentService,
     private readonly notifier: AlertNotifier,
-    private readonly incidentWebhook?: IncidentWebhookNotifier
+    private readonly incidentWebhook?: IncidentWebhookNotifier,
+    private readonly relayDelivery?: RelayDeliveryRepository
   ) {}
 
   async processFailure(
@@ -94,12 +96,8 @@ export class AlertingService {
 
     try {
       const saved = await this.incidentRepository.save(incident);
-      if (this.incidentWebhook) {
-        try {
-          await this.incidentWebhook.sendOpened(saved);
-        } catch (error) {
-          console.error(`Failed to send incident.opened webhook for incident ${saved.id}`, error);
-        }
+      if (this.relayDelivery) {
+        await this.relayDelivery.save(this.relayDelivery.create({ incidentId: saved.id, eventType: "OPEN", status: "PENDING", retryCount: 0 }));
       }
       return saved;
     } catch (error) {
@@ -124,12 +122,9 @@ export class AlertingService {
 
     if (!incident) return null;
 
-    if (this.incidentWebhook) {
-      try {
-        await this.incidentWebhook.sendResolved(incident);
-      } catch (error) {
-        console.error(`Failed to send incident.resolved webhook for incident ${incident.id}`, error);
-      }
+    if (this.relayDelivery) {
+      await this.relayDelivery.cancelOpen(incident.id);
+      await this.relayDelivery.save(this.relayDelivery.create({ incidentId: incident.id, eventType: "RESOLVED", status: "PENDING", retryCount: 0 }));
     }
 
     try {

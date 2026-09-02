@@ -270,4 +270,8 @@ export class IncidentRepository {
     };
   }
 
+
+  findById(id: string): Promise<IncidentEntity | null> {
+    return this.repository.findOne({ where: { id } });
+  }
 }
