@@ -1,3 +1,4 @@
+// Version: 2.6.0
 import {
   Column,
   CreateDateColumn,
@@ -18,13 +19,13 @@ import { ResolutionTimeEntity } from "./resolution-time.entity";
 @Index("idx_incidents_resolved_at", ["resolvedAt"])
 @Index("idx_incidents_postpone_until", ["status", "postponeUntil"])
 export class IncidentEntity {
-  @PrimaryGeneratedColumn({ type: "bigint", unsigned: true })
+  @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
 
   @Column({ name: "public_id", type: "varchar", length: 32 })
   publicId!: string;
 
-  @Column({ name: "cluster_id", type: "bigint", unsigned: true })
+  @Column({ name: "cluster_id", type: "bigint" })
   clusterId!: string;
 
   @Column({ type: "varchar", length: 32 })
@@ -72,13 +73,13 @@ export class IncidentEntity {
   @Column({ name: "next_notification_at", type: "timestamp", precision: 3, nullable: true })
   nextNotificationAt!: Timestamp | null;
 
-  @Column({ name: "reminder_count", type: "int", unsigned: true, default: 0 })
+  @Column({ name: "reminder_count", type: "int", default: 0 })
   reminderCount!: number;
 
   @Column({ name: "acknowledged_at", type: "timestamp", precision: 3, nullable: true })
   acknowledgedAt!: Timestamp | null;
 
-  @Column({ name: "acknowledged_by", type: "bigint", unsigned: true, nullable: true })
+  @Column({ name: "acknowledged_by", type: "bigint", nullable: true })
   acknowledgedBy!: string | null;
 
   @Column({ name: "acknowledged_by_user_name", type: "varchar", length: 255, nullable: true })
@@ -93,7 +94,7 @@ export class IncidentEntity {
   @Column({ name: "postponed_at", type: "timestamp", precision: 3, nullable: true })
   postponedAt!: Timestamp | null;
 
-  @Column({ name: "postponed_by", type: "bigint", unsigned: true, nullable: true })
+  @Column({ name: "postponed_by", type: "bigint", nullable: true })
   postponedBy!: string | null;
 
   @Column({ name: "postponed_by_user_name", type: "varchar", length: 255, nullable: true })

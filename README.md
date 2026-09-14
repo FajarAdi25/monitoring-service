@@ -1,6 +1,6 @@
-# Monitoring Service v2.5.0
+# Monitoring Service v2.6.1
 
-Node.js + TypeScript + TypeORM + MySQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
+Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
 
 ## SSL Alert Webhook Context
 
@@ -65,24 +65,31 @@ npm run db:migrate
 npm run dev
 ```
 
-### Windows Docker local
+### Docker backend with external PostgreSQL
 
-Current local Docker mapping is `localhost:3001 -> container:3002`. MySQL and Telegram Bot run natively on Windows; the container reaches them through `host.docker.internal`. Use `.env.docker.local` and `compose.local.yml`.
+The Docker image contains only Monitoring Service. PostgreSQL runs separately and may be hosted on another server. Configure the database connection through `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, and `DB_NAME`.
 
-```powershell
-docker compose --env-file .env.docker.local -f compose.local.yml up -d --build
+Example database configuration:
+
+```env
+APP_PORT=3002
+DB_HOST=10.10.10.20
+DB_PORT=5432
+DB_USERNAME=monitoring
+DB_PASSWORD=CHANGE_ME
+DB_NAME=monitoring
 ```
 
-For an existing database, run `npm run db:migrate`. SSL monitoring is enabled per cluster through `clusters.ssl_monitoring`. Only clusters with `ssl_monitoring = true` are checked for TLS certificate expiry.
+On container startup, Monitoring Service connects directly to the configured PostgreSQL server, applies pending TypeORM migrations, and then starts the API. The PostgreSQL server must already exist and accept network connections from the backend server. For a non-Docker backend, run `npm run db:migrate`. SSL monitoring is enabled per cluster through `clusters.ssl_monitoring`. Only clusters with `ssl_monitoring = true` are checked for TLS certificate expiry.
 
 ## Important environment variables
 
 ```env
-APP_PORT=3000
+APP_PORT=3002
 
 ALERTING_POLL_INTERVAL_MS=1000
 ALERT_REMINDER_INTERVAL_MS=60000
-ALERT_WEBHOOK_URL=http://127.0.0.1:3000/api/v1/webhooks/telegram/dummy
+ALERT_WEBHOOK_URL=http://127.0.0.1:3002/api/v1/webhooks/telegram/dummy
 
 NOMAD_ENABLED=true
 NOMAD_PULL_CRON="*/15 * * * * *"
@@ -97,11 +104,11 @@ MONITORING_BASIC_AUTH_PASSWORD=replace-with-a-strong-random-password
 
 ## SSL certificate expiry monitoring
 
-SSL certificate monitoring is opt-in per cluster through the `clusters.ssl_monitoring` flag. The migration defaults the flag to `false`, so existing clusters are not monitored until explicitly enabled.
+SSL certificate monitoring is opt-in per cluster through the `clusters.ssl_monitoring` flag. The PostgreSQL baseline defaults the flag to `false`, so a cluster is not monitored until it is explicitly enabled.
 
 ```sql
 UPDATE clusters
-SET ssl_monitoring = 1
+SET ssl_monitoring = TRUE
 WHERE cluster_id = <cluster_id>;
 ```
 
@@ -351,25 +358,67 @@ DRIVER_UNHEALTHY    -> WARNING
 
 Nilai severity tidak lagi diambil dari environment variable.
 
-## Docker testing deployment
+## Docker backend deployment
 
-Docker runs **only Monitoring Service**. MySQL remains the existing host/server installation and is not created by Compose. Pending migrations are applied by the Monitoring Service container before the API starts.
+Docker is used only for Monitoring Service. PostgreSQL is not part of the backend image and no Docker Compose file is required. The backend connects to PostgreSQL over the network using the database environment variables.
 
-Docker deployment files are available for Windows local testing and Linux development servers.
-
-See [`docs/DOCKER_DEPLOYMENT.md`](docs/DOCKER_DEPLOYMENT.md).
-
-Local Windows quick start:
-
-```powershell
-Copy-Item .env.docker.local.example .env.docker.local
-docker compose --env-file .env.docker.local -f compose.local.yml up -d --build
-```
-
-Linux development quick start:
+Build the backend image:
 
 ```bash
-cp .env.docker.dev.example .env.docker.dev
-chmod 600 .env.docker.dev
-docker compose --env-file .env.docker.dev -f compose.dev.yml up -d --build
+docker build -t monitoring-service:2.6.1 .
+```
+
+Create the runtime environment file from `.env.example` and set the remote PostgreSQL connection:
+
+```env
+APP_PORT=3002
+DB_HOST=10.10.10.20
+DB_PORT=5432
+DB_USERNAME=monitoring
+DB_PASSWORD=CHANGE_ME
+DB_NAME=monitoring
+```
+
+Run the backend container:
+
+```bash
+docker run -d \
+  --name monitoring-service \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 3001:3002 \
+  monitoring-service:2.6.1
+```
+
+Check the backend logs:
+
+```bash
+docker logs -f monitoring-service
+```
+
+The startup command runs pending TypeORM migrations against the configured PostgreSQL database before starting the API. The database server must be reachable from the Docker host, PostgreSQL must allow the backend server IP through its network/firewall and `pg_hba.conf` configuration, and the configured database user must have permission to apply the baseline migration on a fresh database.
+
+### Transfer backend image to another machine
+
+Save only the backend image:
+
+```bash
+docker save -o monitoring-service-2.6.1.tar monitoring-service:2.6.1
+```
+
+Copy `monitoring-service-2.6.1.tar` to the destination server, then load it:
+
+```bash
+docker load -i monitoring-service-2.6.1.tar
+```
+
+Run it on the destination server with an environment file that points to the external PostgreSQL server:
+
+```bash
+docker run -d \
+  --name monitoring-service \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 3001:3002 \
+  monitoring-service:2.6.1
 ```

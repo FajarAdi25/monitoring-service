@@ -1,3 +1,4 @@
+// Version: 2.6.0
 import {
   Column,
   CreateDateColumn,
@@ -17,10 +18,10 @@ import type { Timestamp } from "../../common/types/timestamp";
 @Index("idx_monitoring_current_states_filter", ["clusterId", "source", "resourceType", "state"])
 @Index("idx_monitoring_current_states_last_checked", ["lastCheckedAt"])
 export class MonitoringCurrentStateEntity {
-  @PrimaryGeneratedColumn({ type: "bigint", unsigned: true })
+  @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
 
-  @Column({ name: "cluster_id", type: "bigint", unsigned: true })
+  @Column({ name: "cluster_id", type: "bigint" })
   clusterId!: string;
 
   @Column({ type: "varchar", length: 32 })

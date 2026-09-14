@@ -1,15 +1,16 @@
+// Version: 2.6.0
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/app-error";
 import type { User } from "../types/user";
 
-const MYSQL_UNSIGNED_BIGINT_MAX = 18_446_744_073_709_551_615n;
+const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
 
 function normalizeTelegramUserId(value: string): string | null {
   const normalized = value.trim();
   if (!/^\d+$/.test(normalized)) return null;
 
   const numeric = BigInt(normalized);
-  if (numeric <= 0n || numeric > MYSQL_UNSIGNED_BIGINT_MAX) return null;
+  if (numeric <= 0n || numeric > POSTGRES_BIGINT_MAX) return null;
   return numeric.toString();
 }
 

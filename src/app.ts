@@ -1,7 +1,10 @@
-// Version: 2.5.0
+// Version: 2.5.5
 import express from "express";
 import { AppDataSource } from "./database/data-source";
-import { userMiddleware } from "./common/middleware/user.middleware";
+import { basicAuthMiddleware } from "./common/middleware/basic-auth.middleware";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { errorMiddleware } from "./common/middleware/error.middleware";
 import { notFoundMiddleware } from "./common/middleware/not-found.middleware";
 import { ClusterRepository } from "./modules/clusters/cluster.repository";
@@ -35,7 +38,10 @@ export interface AppDependencies {
 export function createApp(dependencies: AppDependencies) {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
-  app.use(userMiddleware);
+  app.use(helmet());
+  app.use(cors({ origin: false }));
+  app.use(rateLimit({ windowMs: 60 * 1000, max: 100 }));
+  app.use(basicAuthMiddleware);
 
   const clusterRepository = new ClusterRepository(AppDataSource);
   const incidentRepository = new IncidentRepository(AppDataSource);

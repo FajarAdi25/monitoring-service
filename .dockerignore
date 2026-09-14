@@ -1,3 +1,4 @@
+# Version: 2.6.1
 node_modules
 dist
 .git
@@ -5,12 +6,8 @@ dist
 .env
 .env.*
 !.env.example
-!.env.docker.local.example
-!.env.docker.dev.example
 npm-debug.log*
 Dockerfile*
-compose*.yml
-docker-compose*.yml
 docs
 postman
 *.zip

@@ -1,10 +1,11 @@
+// Version: 2.6.0
 import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from "typeorm";
 import type { Timestamp } from "../../common/types/timestamp";
 import { ClusterEnvironment } from "./cluster.enums";
 
 @Entity({ name: "clusters" })
 export class ClusterEntity {
-  @PrimaryColumn({ name: "cluster_id", type: "bigint", unsigned: true })
+  @PrimaryColumn({ name: "cluster_id", type: "bigint" })
   clusterId!: string;
 
   @Column({ type: "varchar", length: 512 })
@@ -19,7 +20,7 @@ export class ClusterEntity {
   @Column({ name: "app_name", type: "varchar", length: 255 })
   appName!: string;
 
-  @Column({ type: "enum", enum: ClusterEnvironment })
+  @Column({ type: "enum", enum: ClusterEnvironment, enumName: "clusters_env_enum" })
   env!: ClusterEnvironment;
 
   @Column({ type: "varchar", length: 512 })

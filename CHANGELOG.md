@@ -1,3 +1,24 @@
+## v2.6.1 - External PostgreSQL Deployment
+
+- Removed Docker Compose deployment files.
+- Backend Docker image now runs independently from PostgreSQL.
+- PostgreSQL is configured only through `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, and `DB_NAME`.
+- Backend startup still applies pending TypeORM migrations before starting the API.
+- Updated Docker build, `docker save`, `docker load`, and `docker run` documentation for a remote PostgreSQL server.
+- Updated backend image version to `monitoring-service:2.6.1`.
+- No database schema, migration, API, alerting, monitoring, or incident lifecycle changes.
+
+## v2.6.0 - PostgreSQL Baseline and Docker Database
+
+- Replaced the MySQL runtime driver with PostgreSQL using `pg`.
+- Replaced the historical MySQL migration chain with one PostgreSQL baseline migration for the current final schema.
+- Updated PostgreSQL-incompatible entity metadata and the monitoring snapshot raw SQL parameter syntax.
+- Updated Telegram user ID validation to the PostgreSQL signed `BIGINT` range.
+- Added PostgreSQL 17 as a Docker Compose service with persistent storage and health-gated backend startup.
+- Monitoring Service continues to apply pending TypeORM migrations before the API starts.
+- Updated Docker image version to `monitoring-service:2.6.0`.
+- No MySQL data migration, seed data, API contract change, alert lifecycle change, Nomad behavior change, SSL behavior change, or Relay behavior change is included.
+
 ## v2.5.4 - Relay payload contract alignment
 
 - Updated Relay webhook payload structure to match Relay contract.
@@ -208,3 +229,13 @@
 - Added compiled migration/revert npm scripts.
 - Added Docker deployment documentation.
 - Nomad polling remains every 15 seconds with `noOverlap` and worker running guard unchanged.
+
+
+## 2.5.5
+
+Security hardening:
+- Added Basic Authentication middleware using MONITORING_BASIC_AUTH_USERNAME and MONITORING_BASIC_AUTH_PASSWORD.
+- Kept dashboard health endpoint public for Nomad health checks.
+- Added Helmet security headers.
+- Added API rate limiting.
+- Added disabled-by-default CORS policy.

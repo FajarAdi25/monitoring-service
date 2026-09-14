@@ -1,12 +1,13 @@
-import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
+// Version: 2.6.0
+import { Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { IncidentEntity } from "./incident.entity";
 
 @Entity({ name: "resolution_time" })
 export class ResolutionTimeEntity {
-  @PrimaryGeneratedColumn({ type: "bigint", unsigned: true })
+  @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
 
-  @Column({ name: "incident_id", type: "bigint", unsigned: true })
+  @Column({ name: "incident_id", type: "bigint" })
   incidentId!: string;
 
   @OneToOne(() => IncidentEntity)
@@ -19,12 +20,12 @@ export class ResolutionTimeEntity {
   @Column({ name: "resolved_at", type: "timestamp", precision: 3, nullable: true })
   resolvedAt!: Date | null;
 
-  @Column({ name: "duration_seconds", type: "int", unsigned: true, nullable: true })
+  @Column({ name: "duration_seconds", type: "int", nullable: true })
   durationSeconds!: number | null;
 
-  @Column({ name: "created_at", type: "timestamp", precision: 3, default: () => "CURRENT_TIMESTAMP(3)" })
+  @CreateDateColumn({ name: "created_at", type: "timestamp", precision: 3 })
   createdAt!: Date;
 
-  @Column({ name: "updated_at", type: "timestamp", precision: 3, default: () => "CURRENT_TIMESTAMP(3)", onUpdate: "CURRENT_TIMESTAMP(3)" })
+  @UpdateDateColumn({ name: "updated_at", type: "timestamp", precision: 3 })
   updatedAt!: Date;
 }

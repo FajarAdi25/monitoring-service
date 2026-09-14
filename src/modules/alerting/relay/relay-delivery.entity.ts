@@ -1,13 +1,14 @@
+// Version: 2.6.0
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity({ name: "relay_deliveries" })
 @Index("idx_relay_delivery_retry", ["status", "nextRetryAt"])
 @Index("idx_relay_delivery_incident_event", ["incidentId", "eventType"], { unique: true })
 export class RelayDeliveryEntity {
-  @PrimaryGeneratedColumn({ type: "bigint", unsigned: true })
+  @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
 
-  @Column({ name: "incident_id", type: "bigint", unsigned: true })
+  @Column({ name: "incident_id", type: "bigint" })
   incidentId!: string;
 
   @Column({ name: "event_type", type: "varchar", length: 16 })
@@ -16,7 +17,7 @@ export class RelayDeliveryEntity {
   @Column({ type: "varchar", length: 16 })
   status!: "PENDING" | "FAILED" | "SUCCESS" | "CANCELLED";
 
-  @Column({ name: "retry_count", type: "int", unsigned: true, default: 0 })
+  @Column({ name: "retry_count", type: "int", default: 0 })
   retryCount!: number;
 
   @Column({ name: "last_error", type: "text", nullable: true })

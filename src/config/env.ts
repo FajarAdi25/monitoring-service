@@ -1,3 +1,4 @@
+// Version: 2.6.0
 import "dotenv/config";
 
 function required(name: string, fallback?: string): string {
@@ -56,7 +57,7 @@ export const env = {
   },
   db: {
     host: required("DB_HOST", "127.0.0.1"),
-    port: Number(process.env.DB_PORT ?? 3306),
+    port: Number(process.env.DB_PORT ?? 5432),
     username: required("DB_USERNAME", "monitoring"),
     password: required("DB_PASSWORD", "monitoring"),
     database: required("DB_NAME", "monitoring"),

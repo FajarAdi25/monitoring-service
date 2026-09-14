@@ -1,4 +1,4 @@
-// Version: 2.2.0
+// Version: 2.6.0
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { env } from "../config/env";
@@ -9,23 +9,10 @@ import { MonitoringCurrentStateEntity } from "../modules/monitoring/monitoring-c
 import { MonitoringSnapshotEntity } from "../modules/monitoring/monitoring-snapshot.entity";
 import { SslMonitoringEntity } from "../modules/ssl-certificate/ssl-monitoring.entity";
 import { RelayDeliveryEntity } from "../modules/alerting/relay/relay-delivery.entity";
-import { CreateIncidents1786680000000 } from "./migrations/1786680000000-CreateIncidents";
-import { CreateMonitoringSnapshots1786680100000 } from "./migrations/1786680100000-CreateMonitoringSnapshots";
-import { CreateMonitoringCurrentStates1786680200000 } from "./migrations/1786680200000-CreateMonitoringCurrentStates";
-import { ResetNomadAllocationCurrentStates1786680300000 } from "./migrations/1786680300000-ResetNomadAllocationCurrentStates";
-import { ConvertDateTimeColumnsToTimestamp1786680400000 } from "./migrations/1786680400000-ConvertDateTimeColumnsToTimestamp";
-import { AddClosureReminderFields1786680500000 } from "./migrations/1786680500000-AddClosureReminderFields";
-import { ReplaceCloseWithPostpone1786680600000 } from "./migrations/1786680600000-ReplaceCloseWithPostpone";
-import { NormalizeNomadIncidentSeverity1786680700000 } from "./migrations/1786680700000-NormalizeNomadIncidentSeverity";
-import { AddIncidentUserIdentity1786680800000 } from "./migrations/1786680800000-AddIncidentUserIdentity";
-import { CreateClusters1786680900000 } from "./migrations/1786680900000-CreateClusters";
-import { CreateResolutionTime1786681000000 } from "./migrations/1786681000000-CreateResolutionTime";
-import { AddSslMonitoringToClusters1786681100000 } from "./migrations/1786681100000-AddSslMonitoringToClusters";
-import { CreateSslMonitoring1786681200000 } from "./migrations/1786681200000-CreateSslMonitoring";
-import { CreateRelayDeliveries1786681300000 } from "./migrations/1786681300000-CreateRelayDeliveries";
+import { CreatePostgresBaseline1789359000000 } from "./migrations/1789359000000-CreatePostgresBaseline";
 
 export const AppDataSource = new DataSource({
-  type: "mysql",
+  type: "postgres",
   host: env.db.host,
   port: env.db.port,
   username: env.db.username,
@@ -40,23 +27,7 @@ export const AppDataSource = new DataSource({
     SslMonitoringEntity,
     RelayDeliveryEntity,
   ],
-  migrations: [
-    CreateIncidents1786680000000,
-    CreateMonitoringSnapshots1786680100000,
-    CreateMonitoringCurrentStates1786680200000,
-    ResetNomadAllocationCurrentStates1786680300000,
-    ConvertDateTimeColumnsToTimestamp1786680400000,
-    AddClosureReminderFields1786680500000,
-    ReplaceCloseWithPostpone1786680600000,
-    NormalizeNomadIncidentSeverity1786680700000,
-    AddIncidentUserIdentity1786680800000,
-    CreateClusters1786680900000,
-    CreateResolutionTime1786681000000,
-    AddSslMonitoringToClusters1786681100000,
-    CreateSslMonitoring1786681200000,
-    CreateRelayDeliveries1786681300000,
-  ],
+  migrations: [CreatePostgresBaseline1789359000000],
   synchronize: false,
   logging: false,
-  timezone: "+07:00",
 });

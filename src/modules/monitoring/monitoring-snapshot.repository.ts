@@ -1,3 +1,4 @@
+// Version: 2.6.0
 import type { DataSource, Repository } from "typeorm";
 import { MonitoringSnapshotEntity } from "./monitoring-snapshot.entity";
 import type { MonitoringSnapshotFilters, SaveMonitoringSnapshotInput } from "./monitoring-snapshot.types";
@@ -59,12 +60,12 @@ export class MonitoringSnapshotRepository {
   }): Promise<Array<{ resourceKey: string; state: string }>> {
     const rows = await this.repository.query(
       `
-        SELECT s.resource_key AS resourceKey, s.state AS state
+        SELECT s.resource_key AS "resourceKey", s.state AS state
         FROM monitoring_snapshots s
         INNER JOIN (
           SELECT resource_key, MAX(id) AS max_id
           FROM monitoring_snapshots
-          WHERE cluster_id = ? AND source = ? AND resource_type = ?
+          WHERE cluster_id = $1 AND source = $2 AND resource_type = $3
           GROUP BY resource_key
         ) latest ON latest.max_id = s.id
       `,

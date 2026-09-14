@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# Version: 2.6.1
 
 FROM node:22-bookworm-slim AS dependencies
 WORKDIR /app
@@ -26,6 +27,6 @@ COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3002
 
-# The database itself runs outside Docker. On each container start, apply only
-# pending TypeORM migrations, then replace the shell with the application.
+# PostgreSQL is external to this image and is reached through DB_HOST/DB_PORT.
+# On each backend start, apply only pending TypeORM migrations, then start the API.
 CMD ["sh", "-c", "node dist/database/run-migrations.js && exec node dist/server.js"]

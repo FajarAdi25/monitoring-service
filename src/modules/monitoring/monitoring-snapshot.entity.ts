@@ -1,3 +1,4 @@
+// Version: 2.6.0
 import {
   Column,
   CreateDateColumn,
@@ -11,10 +12,10 @@ import type { Timestamp } from "../../common/types/timestamp";
 @Index("idx_monitoring_snapshots_lookup", ["clusterId", "source", "resourceType", "resourceKey", "id"])
 @Index("idx_monitoring_snapshots_observed_at", ["observedAt"])
 export class MonitoringSnapshotEntity {
-  @PrimaryGeneratedColumn({ type: "bigint", unsigned: true })
+  @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
 
-  @Column({ name: "cluster_id", type: "bigint", unsigned: true })
+  @Column({ name: "cluster_id", type: "bigint" })
   clusterId!: string;
 
   @Column({ type: "varchar", length: 32 })

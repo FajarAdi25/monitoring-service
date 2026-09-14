@@ -1,4 +1,4 @@
-// Version: 2.2.0
+// Version: 2.6.0
 import {
   Column,
   CreateDateColumn,
@@ -12,10 +12,10 @@ import type { Timestamp } from "../../common/types/timestamp";
 @Entity({ name: "ssl_monitoring" })
 @Index("uq_ssl_monitoring_cluster", ["clusterId"], { unique: true })
 export class SslMonitoringEntity {
-  @PrimaryGeneratedColumn({ type: "bigint", unsigned: true })
+  @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
 
-  @Column({ name: "cluster_id", type: "bigint", unsigned: true })
+  @Column({ name: "cluster_id", type: "bigint" })
   clusterId!: string;
 
   @Column({ name: "valid_from", type: "timestamp", precision: 3 })
