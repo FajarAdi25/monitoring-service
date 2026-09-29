@@ -1,60 +1,32 @@
-# Monitoring Service v2.6.1
+# Monitoring Service v2.7.1
 
-Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, incident alerting, ACK, and POSTPONE.
-
-## SSL Alert Webhook Context
-
-For `SSL_CERTIFICATE_EXPIRING` incidents, the webhook payload includes `incident.contextJson` with the SSL inspection context already stored on the incident:
-
-```json
-{
-  "endpoint": "https://cluster.example",
-  "validFrom": "2026-01-01T00:00:00.000Z",
-  "expiresAt": "2026-09-15T00:00:00.000Z",
-  "daysRemaining": 19,
-  "subjectCn": "cluster.example",
-  "issuerCn": "Example CA",
-  "certificateFingerprint256": "..."
-}
-```
-
-Non-SSL incident webhook payloads are unchanged.
+Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, and incident alerting.
 
 ## Current incident lifecycle
-
-`POSTPONE` and `ACK` are metadata/actions, not statuses.
 
 ```text
 Nomad Pull
   every 15 seconds
+  active clusters only (clusters.is_active = true)
   noOverlap = true
   worker running guard = true
 
 Failure
   -> OPEN
-  -> INITIAL webhook immediately
-  -> REMINDER every 1 minute
-
-ACK
-  -> status stays OPEN or RESOLVED
-  -> acknowledgement metadata is stored
-  -> reminder behavior is unchanged
-
-POSTPONE (OPEN only)
-  -> status stays OPEN
-  -> INITIAL is never postponed
-  -> OPEN reminders are deferred until postponeUntil
-  -> after postponeUntil, REMINDER resumes every 1 minute
-  -> requester, request timestamp, postponeUntil, and remark are stored
+  -> INITIAL alert (status "firing") immediately
+  -> REMINDER alert (status "firing"):
+       CRITICAL every 1 minute
+       MAJOR / WARNING every 5 minutes
+       SSL_CERTIFICATE_EXPIRING every 24 hours
 
 Recovery detected by monitoring engine
   -> OPEN -> RESOLVED
-  -> RESOLVED webhook immediately
+  -> RESOLVED alert (status "resolved") immediately
   -> next_notification_at = NULL
   -> OPEN reminders stop
 ```
 
-There is no `CLOSED` status and no Close Case API in the current lifecycle.
+There is no `CLOSED` status, no Close Case API, and no ACK/POSTPONE action in the current lifecycle.
 
 ## Setup
 
@@ -80,7 +52,7 @@ DB_PASSWORD=CHANGE_ME
 DB_NAME=monitoring
 ```
 
-On container startup, Monitoring Service connects directly to the configured PostgreSQL server, applies pending TypeORM migrations, and then starts the API. The PostgreSQL server must already exist and accept network connections from the backend server. For a non-Docker backend, run `npm run db:migrate`. SSL monitoring is enabled per cluster through `clusters.ssl_monitoring`. Only clusters with `ssl_monitoring = true` are checked for TLS certificate expiry.
+On container startup, Monitoring Service connects directly to the configured PostgreSQL server, applies pending TypeORM migrations, and then starts the API. The PostgreSQL server must already exist and accept network connections from the backend server. For a non-Docker backend, run `npm run db:migrate`. SSL monitoring is enabled per cluster through `clusters.ssl_monitoring`. Only active clusters with `ssl_monitoring = true` are checked for TLS certificate expiry.
 
 ## Important environment variables
 
@@ -89,16 +61,21 @@ APP_PORT=3002
 
 ALERTING_POLL_INTERVAL_MS=1000
 ALERT_REMINDER_INTERVAL_MS=60000
-ALERT_WEBHOOK_URL=http://127.0.0.1:3002/api/v1/webhooks/telegram/dummy
+ALERT_WEBHOOK_URL=http://10.59.179.182:8080/api/v1/webhook/alerts
+ALERT_WEBHOOK_TOKEN=CHANGE_ME
 
 NOMAD_ENABLED=true
 NOMAD_PULL_CRON="*/15 * * * * *"
 NOMAD_PULL_CRON_TZ=Asia/Jakarta
 NOMAD_PULL_RUN_ON_START=true
 
-MONITORING_BASIC_AUTH_USERNAME=telegram-bot
+MONITORING_BASIC_AUTH_USERNAME=CHANGE_ME
 MONITORING_BASIC_AUTH_PASSWORD=replace-with-a-strong-random-password
 ```
+
+`ALERT_WEBHOOK_TOKEN` is sent as `Authorization: Bearer <token>`. When `ALERT_WEBHOOK_URL` is empty, alerts are only logged to the console.
+
+All API routes except `GET /api/v1/dashboard/health` require `Authorization: Basic base64(<MONITORING_BASIC_AUTH_USERNAME>:<MONITORING_BASIC_AUTH_PASSWORD>)`. Use HTTPS in production because Basic Auth is Base64 encoding, not encryption.
 
 `NOMAD_PULL_CRON="*/15 * * * * *"` means one pull every 15 seconds. `NomadPullWorker` keeps both `noOverlap: true` and its own `running` guard.
 
@@ -112,6 +89,20 @@ SET ssl_monitoring = TRUE
 WHERE cluster_id = <cluster_id>;
 ```
 
+A cluster is checked only when all of the following are true:
+
+- `clusters.is_active = TRUE`
+- `clusters.ssl_monitoring = TRUE`
+- its `ssl_monitoring` row does not exist yet, or `ssl_monitoring.is_active = TRUE`
+
+To stop SSL checks for one cluster without deleting its inspection data:
+
+```sql
+UPDATE ssl_monitoring
+SET is_active = FALSE
+WHERE cluster_id = <cluster_id>;
+```
+
 The worker inspects the TLS certificate presented by the cluster `url` once on service startup and then every 24 hours. If the certificate has 30 days or less remaining, it creates or refreshes an `OPEN` incident with source `SSL`, type `SSL_CERTIFICATE_EXPIRING`, and severity `WARNING`. The existing alert webhook sends the INITIAL notification and then one REMINDER every 24 hours. When a renewed certificate has more than 30 days remaining, the incident is resolved and the existing RESOLVED webhook is sent.
 
 The certificate inspection reads the peer certificate directly from the TLS handshake and does not require the HTTP response body. Trust-chain verification is disabled for this inspection so the expiry date can still be read from internally issued certificates.
@@ -122,7 +113,7 @@ The certificate inspection reads the peer certificate directly from the TLS hand
 GET /api/v1/monitoring/ssl
 ```
 
-The endpoint returns the latest persisted SSL inspection for each monitored cluster. `status` is calculated from `expiresAt` when the request is served:
+The endpoint returns the latest persisted SSL inspection for each monitored cluster. Rows with `ssl_monitoring.is_active = FALSE` are excluded from this endpoint and from the SSL summary in `GET /api/v1/dashboard/overview`. `status` is calculated from `expiresAt` when the request is served:
 
 - `EXPIRED`: the certificate expiry time has passed.
 - `EXPIRING_SOON`: the certificate is still valid and has 30 days or less remaining.
@@ -159,135 +150,128 @@ Example response:
 ```text
 GET    /api/v1/incidents
 GET    /api/v1/incidents/:incidentId
-POST   /api/v1/incidents/:incidentId/acknowledge
-# ACK is one-way in MVP; there is no unacknowledge action.
-POST   /api/v1/incidents/:incidentId/postpone
 ```
 
-### Telegram Bot Service authentication
+## Alert webhook
 
-ACK and POSTPONE are protected by service-to-service authentication:
-
-```http
-Authorization: Basic base64(<MONITORING_BASIC_AUTH_USERNAME>:<MONITORING_BASIC_AUTH_PASSWORD>)
-```
-
-The Telegram user identity is supplied in the request body and normalized into `req.user`.
-`user.id` and `user.name` are required. `user.username` is optional.
-The user identity is trusted only after the Telegram Bot Service Basic credentials are valid. Use HTTPS in production because Basic Auth is Base64 encoding, not encryption.
-
-### ACK request
+Alerts follow the REINTAKE collector webhook contract v1.0 (`metric_source` `hashicorp`). Every INITIAL, REMINDER, and RESOLVED notification is one batch with one alert record, sent as one `POST` to `ALERT_WEBHOOK_URL`:
 
 ```http
-POST /api/v1/incidents/:incidentId/acknowledge
-Authorization: Basic base64(<MONITORING_BASIC_AUTH_USERNAME>:<MONITORING_BASIC_AUTH_PASSWORD>)
+POST /api/v1/webhook/alerts
+Authorization: Bearer <ALERT_WEBHOOK_TOKEN>
 Content-Type: application/json
 ```
 
+Example (`NODE_DOWN`, INITIAL):
+
 ```json
 {
-  "user": {
-    "id": "123456789",
-    "name": "Budi Santoso",
-    "username": "budi_ops"
+  "schema_version": "1.0",
+  "batch_id": "0f5b2f0e-6a7e-4a5c-9a57-2b8f5a1c3d4e",
+  "metric_source": "hashicorp",
+  "collector": {
+    "name": "hashicorp-metric-collector",
+    "version": "2.7.1",
+    "source_instance": "Cluster WEST",
+    "runtime_host": "monitoring-service-host"
   },
-  "note": "Sedang dicek"
+  "delivery_mode": "push",
+  "sent_at_ms": 1790000000000,
+  "record_count": 1,
+  "alerts": [
+    {
+      "alert_id": "HCP-A-3f1c9a7b2e4d5c6a8b9e0f1a",
+      "fingerprint": "hashicorp|nomad_node|9d2e7c1a-4b3f-4e8a-9c1d-2e3f4a5b6c7d|node_down",
+      "metric_source": "hashicorp",
+      "source_alert_id": "INC-1790000000000-ABC123",
+      "status": "firing",
+      "severity": "critical",
+      "category": "platform",
+      "title": "NODE_DOWN - nomadclientwest2",
+      "description": "Nomad node nomadclientwest2 is down.",
+      "started_at_ms": 1789999990000,
+      "updated_at_ms": 1790000000000,
+      "resolved_at_ms": null,
+      "entity": {
+        "type": "nomad_node",
+        "name": "nomadclientwest2",
+        "host_key": "nomadclientwest2",
+        "source_id": "9d2e7c1a-4b3f-4e8a-9c1d-2e3f4a5b6c7d",
+        "ip": "10.30.0.22"
+      },
+      "trigger": null,
+      "dimensions": {
+        "cluster": "Cluster WEST",
+        "site": "cawang",
+        "app": "Nomad West",
+        "env": "PRODUCTION",
+        "datacenter": "dc-west",
+        "node_pool": "default"
+      },
+      "context": {
+        "node_id": "9d2e7c1a-4b3f-4e8a-9c1d-2e3f4a5b6c7d",
+        "status": "down",
+        "status_description": "Node heartbeat missed"
+      }
+    }
+  ]
 }
 ```
 
-### Postpone request
+Field mapping:
 
-```http
-POST /api/v1/incidents/:incidentId/postpone
-Authorization: Basic base64(<MONITORING_BASIC_AUTH_USERNAME>:<MONITORING_BASIC_AUTH_PASSWORD>)
-Content-Type: application/json
-```
+| Field | Value |
+|---|---|
+| `batch_id` | New UUID v4 per batch; a retry resends the same batch unchanged |
+| `collector.version` | `package.json` version |
+| `collector.source_instance` | Cluster name (max 120 chars) |
+| `collector.runtime_host` | Hostname of the Monitoring Service process (max 120 chars) |
+| `delivery_mode` | INITIAL / RESOLVED = `push`, REMINDER = `poll_reconcile` |
+| `alert_id` | `HCP-A-` + 24 lowercase hex chars, stable per incident (INITIAL, REMINDER, and RESOLVED share it) |
+| `fingerprint` | `hashicorp\|<entity.type>\|<resource key>\|<incident type lowercase>` |
+| `source_alert_id` | Incident public id (`INC-...`) |
+| `status` | INITIAL / REMINDER = `firing`, RESOLVED = `resolved` |
+| `severity` | `critical`, `major`, or `warning` |
+| `category` | `platform` |
+| `title` | `<incident type> - <resource name>` (max 512 chars) |
+| `description` | Incident message (max 4,096 chars) |
+| `started_at_ms` | `opened_at` in epoch ms |
+| `updated_at_ms` | firing: `last_detected_at`; resolved: `resolved_at` (always newer than the last firing record) |
+| `resolved_at_ms` | `null` while firing, `resolved_at` when resolved |
+| `entity.type` | NODE / DRIVER = `nomad_node`, ALLOCATION / EVALUATION = `other`, SSL = `cluster` |
+| `entity.name` | Resource name (max 256 chars) |
+| `entity.host_key` | NODE / DRIVER: node name, lowercase, up to the first dot; otherwise `""` |
+| `entity.source_id` | Resource key (Nomad ID) |
+| `entity.ip` | Nomad node address for NODE and DRIVER; omitted when not available |
+| `trigger` | `null` (this service does not evaluate metric thresholds) |
+| `dimensions` | `cluster`, `site`, `app`, `env`; NODE also `datacenter` and `node_pool` when available |
+| `context` | Selected string values per resource type (see below) |
 
-```json
-{
-  "user": {
-    "id": "123456789",
-    "name": "Budi Santoso",
-    "username": "budi_ops"
-  },
-  "postponeUntil": "2026-08-16T13:30:00+07:00",
-  "remark": "Menunggu maintenance selesai"
-}
-```
+`dimensions` and `context` are string-to-string maps (max 20 keys, values max 256 chars). Empty values are omitted.
 
-`postponedAt` is generated by Monitoring Service. User id, name, and optional username are persisted as the user identity snapshot for ACK/POSTPONE.
+| Resource type | `context` keys |
+|---|---|
+| NODE | `node_id`, `status`, `status_description` |
+| DRIVER | `node_id`, `node_name`, `driver`, `health_description` |
+| ALLOCATION | `namespace`, `job_id`, `task_group`, `slot`, `allocation_id`, `node_name`, `client_status`, `client_description` |
+| EVALUATION | `evaluation_id`, `job_id`, `namespace`, `status`, `status_description` |
+| SSL | `endpoint`, `valid_from`, `expires_at`, `days_remaining`, `subject_cn`, `issuer_cn`, `certificate_fingerprint256` |
 
-Example response:
+REINTAKE forwards a Telegram message only once per `alert_id` + `status` + `severity`, so REMINDER batches are stored by REINTAKE but do not create new Telegram messages. A severity change does.
 
-```json
-{
-  "success": true,
-  "data": {
-    "id": "INC-00123",
-    "status": "OPEN",
-    "postponed": true,
-    "postponedAt": "2026-08-16T04:20:00.000Z",
-    "postponedBy": {
-      "id": 123456789,
-      "name": "Budi Santoso",
-      "username": "budi_ops"
-    },
-    "postponeUntil": "2026-08-16T06:30:00.000Z",
-    "postponeRemark": "Menunggu maintenance selesai",
-    "nextNotificationAt": "2026-08-16T06:30:00.000Z"
-  }
-}
-```
+### Delivery and retry
 
-`postponeUntil` must be in the future. A `RESOLVED` incident cannot be postponed.
+Alerts are queued in `alert_deliveries` and sent by the alerting worker (every `ALERTING_POLL_INTERVAL_MS`). The stored payload, including `batch_id`, is resent unchanged on retry. Response handling follows the contract (section 7.4):
 
-## Webhook notifications
+| REINTAKE response | Result |
+|---|---|
+| `202` | `SENT`. Rejected records from `errors` are logged and stored in `last_error` |
+| `200` (duplicate) | `SENT` |
+| `503` | Retry after `Retry-After` seconds (default 5) |
+| `500` or network error / timeout | Retry with backoff: 5s, 10s, 20s, ... up to 5 minutes |
+| `400`, `401`, `403`, `413`, `415`, other | `FAILED`, not retried; logged with the response body |
 
-The alert webhook kinds are:
-
-```text
-INITIAL
-REMINDER
-RESOLVED
-```
-
-Example:
-
-```json
-{
-  "event": "INCIDENT_ALERT",
-  "kind": "RESOLVED",
-  "incident": {
-    "id": "INC-00123",
-    "status": "RESOLVED",
-    "source": "NOMAD",
-    "type": "DRIVER_UNHEALTHY",
-    "severity": "WARNING",
-    "resource": {
-      "type": "DRIVER",
-      "key": "node-id:docker",
-      "name": "nomadworker-east-4/docker"
-    },
-    "message": "Docker driver unhealthy",
-    "clusterName": "Cluster EAST",
-    "site": "cawang",
-    "appName": "Nomad East Lab App",
-    "env": "PRODUCTION",
-    "openedAt": "2026-08-16T03:00:00.000Z",
-    "resolvedAt": "2026-08-16T03:17:30.000Z",
-    "reminderCount": 3,
-    "acknowledgedAt": "2026-08-16T03:05:00.000Z",
-    "acknowledgedByUserName": "Budi Santoso",
-    "acknowledgementNote": "Sedang dicek",
-    "postponedAt": "2026-08-16T03:10:00.000Z",
-    "postponedByUserName": "Budi Santoso",
-    "postponeUntil": "2026-08-16T04:00:00.000Z",
-    "postponeRemark": "Menunggu maintenance selesai"
-  }
-}
-```
-
-ACK metadata is included only after the incident has been acknowledged. POSTPONE metadata is included only after the incident has been postponed. These metadata fields are included in subsequent `REMINDER` and `RESOLVED` webhook broadcasts when present.
+Retries continue until the batch is `SENT` or `FAILED`, so a RESOLVED alert is not lost while REINTAKE is unavailable.
 
 ## Monitoring data
 
@@ -315,6 +299,22 @@ Monitoring and incident responses preserve their existing `clusterId` and add `c
 
 Nomad connection data is loaded from the `clusters` table. The migration creates the schema only; operations inserts production rows manually. Runtime supports any number of registered clusters. `url` and `token` are internal and are never exposed through existing APIs or webhooks.
 
+Clusters can be disabled without deleting data:
+
+```sql
+UPDATE clusters
+SET is_active = FALSE
+WHERE cluster_id = <cluster_id>;
+```
+
+When `clusters.is_active = FALSE`:
+
+- the cluster is skipped by the Nomad pull, the SSL certificate check, and the Nomad API (`?cluster=<id>` returns `CLUSTER_NOT_FOUND`);
+- reminders for its OPEN incidents are paused; the incident status is not changed;
+- existing incidents, current states, snapshots, and SSL data stay in the database and remain visible in the incident, monitoring, and dashboard APIs.
+
+Setting `is_active = TRUE` again resumes monitoring. A paused OPEN incident whose reminder is overdue sends its next REMINDER on the next alerting worker tick.
+
 ```text
 GET  /api/v1/nomad/nodes?cluster=1
 GET  /api/v1/nomad/nodes
@@ -328,7 +328,7 @@ POST /api/v1/nomad/pull?cluster=1
 POST /api/v1/nomad/pull
 ```
 
-`cluster` is optional. List endpoints without it flatten results from all registered clusters and add `clusterId`, `clusterName`, `site`, `appName`, and `env` to each item. Unscoped detail lookup returns `NOMAD_RESOURCE_NOT_FOUND` when no cluster matches and `NOMAD_RESOURCE_CLUSTER_AMBIGUOUS` when more than one cluster matches. All-cluster pull returns one success/error outcome per cluster and continues when one cluster fails.
+`cluster` is optional. List endpoints without it flatten results from all active clusters and add `clusterId`, `clusterName`, `site`, `appName`, and `env` to each item. Unscoped detail lookup returns `NOMAD_RESOURCE_NOT_FOUND` when no cluster matches and `NOMAD_RESOURCE_CLUSTER_AMBIGUOUS` when more than one cluster matches. All-cluster pull returns one success/error outcome per cluster and continues when one cluster fails.
 
 ## Dashboard API
 
@@ -341,9 +341,7 @@ GET /api/v1/dashboard/incidents/resolved
 ```
 
 `/dashboard/overview` and `/dashboard/health` read from `monitoring_current_states`.
-The incident dashboard uses the current lifecycle only: `OPEN -> RESOLVED`, with ACK and POSTPONE as metadata/actions. See `docs/DASHBOARD_API.md`.
-
-The old PRD v1.4 is retained under `docs/` as historical source material. The lifecycle in this README and `docs/LIFECYCLE_POSTPONE.md` supersedes its Close Case sections for this project revision.
+The incident dashboard uses the current lifecycle only: `OPEN -> RESOLVED`. `/dashboard/incidents/summary` returns `open.total`, `resolved.today`, `resolved.last24Hours`, `bySeverity`, and `byType`.
 
 ## Nomad severity mapping
 
@@ -360,34 +358,46 @@ Nilai severity tidak lagi diambil dari environment variable.
 
 ## Docker backend deployment
 
-Docker is used only for Monitoring Service. PostgreSQL is not part of the backend image and no Docker Compose file is required. The backend connects to PostgreSQL over the network using the database environment variables.
+Monitoring Service runs as a plain Docker container started with `docker run`. Docker Compose is not used. PostgreSQL is not part of the backend image; the backend connects to it over the network using the database environment variables.
+
+| Environment | Monitoring Service | PostgreSQL | Environment file |
+|---|---|---|---|
+| Local | Docker | Separate Docker container on the same host | `.env.docker.local` |
+| Dev | Docker | Separate server | `.env.docker.dev` |
 
 Build the backend image:
 
 ```bash
-docker build -t monitoring-service:2.6.1 .
+docker build -t monitoring-service:2.7.1 .
 ```
 
-Create the runtime environment file from `.env.example` and set the remote PostgreSQL connection:
+### Local
 
-```env
-APP_PORT=3002
-DB_HOST=10.10.10.20
-DB_PORT=5432
-DB_USERNAME=monitoring
-DB_PASSWORD=CHANGE_ME
-DB_NAME=monitoring
-```
-
-Run the backend container:
+`.env.docker.local` reaches PostgreSQL through `host.docker.internal`, so the PostgreSQL container must publish its port on the host.
 
 ```bash
 docker run -d \
   --name monitoring-service \
   --restart unless-stopped \
-  --env-file .env \
+  --init \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env.docker.local \
+  -p 127.0.0.1:3001:3002 \
+  monitoring-service:2.7.1
+```
+
+### Dev
+
+`.env.docker.dev` points `DB_HOST`/`DB_PORT` to the separate PostgreSQL server.
+
+```bash
+docker run -d \
+  --name monitoring-service \
+  --restart unless-stopped \
+  --init \
+  --env-file .env.docker.dev \
   -p 3001:3002 \
-  monitoring-service:2.6.1
+  monitoring-service:2.7.1
 ```
 
 Check the backend logs:
@@ -403,22 +413,13 @@ The startup command runs pending TypeORM migrations against the configured Postg
 Save only the backend image:
 
 ```bash
-docker save -o monitoring-service-2.6.1.tar monitoring-service:2.6.1
+docker save -o monitoring-service-2.7.1.tar monitoring-service:2.7.1
 ```
 
-Copy `monitoring-service-2.6.1.tar` to the destination server, then load it:
+Copy `monitoring-service-2.7.1.tar` to the destination server, then load it:
 
 ```bash
-docker load -i monitoring-service-2.6.1.tar
+docker load -i monitoring-service-2.7.1.tar
 ```
 
-Run it on the destination server with an environment file that points to the external PostgreSQL server:
-
-```bash
-docker run -d \
-  --name monitoring-service \
-  --restart unless-stopped \
-  --env-file .env \
-  -p 3001:3002 \
-  monitoring-service:2.6.1
-```
+Run it on the destination server with the `docker run` command for that environment (see Local or Dev above).

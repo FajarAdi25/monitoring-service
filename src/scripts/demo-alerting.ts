@@ -9,7 +9,8 @@ async function main(): Promise<void> {
   const alerting = createAlertingModule(AppDataSource, {
     pollIntervalMs: env.alerting.pollIntervalMs,
     openReminderIntervalMs: env.alerting.openReminderIntervalMs,
-    webhookUrl: env.alerting.webhookUrl
+    webhookUrl: env.alerting.webhookUrl,
+    webhookToken: env.alerting.webhookToken
   });
 
   const fingerprint = createHash("sha256")

@@ -1,6 +1,6 @@
 {
   "name": "monitoring-service",
-  "version": "2.6.1",
+  "version": "2.7.1",
   "private": true,
   "type": "commonjs",
   "scripts": {

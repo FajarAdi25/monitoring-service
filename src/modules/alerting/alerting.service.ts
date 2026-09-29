@@ -5,16 +5,12 @@ import { IncidentRepository } from "../incidents/incident.repository";
 import { IncidentService } from "../incidents/incident.service";
 import type { FailureSignal, RecoverySignal } from "./alerting.types";
 import type { AlertNotifier } from "./alerting.notifier";
-import type { IncidentWebhookNotifier } from "./incident-webhook.notifier";
-import type { RelayDeliveryRepository } from "./relay/relay-delivery.repository";
 
 export class AlertingService {
   constructor(
     private readonly incidentRepository: IncidentRepository,
     private readonly incidentService: IncidentService,
-    private readonly notifier: AlertNotifier,
-    private readonly incidentWebhook?: IncidentWebhookNotifier,
-    private readonly relayDelivery?: RelayDeliveryRepository
+    private readonly notifier: AlertNotifier
   ) {}
 
   async processFailure(
@@ -84,22 +80,11 @@ export class AlertingService {
       lastNotificationAt: null,
       nextNotificationAt: detectedAt,
       reminderCount: 0,
-      acknowledgedAt: null,
-      acknowledgedBy: null,
-      acknowledgementNote: null,
-      postponedAt: null,
-      postponedBy: null,
-      postponeUntil: null,
-      postponeRemark: null,
       resolvedAt: null
     });
 
     try {
-      const saved = await this.incidentRepository.save(incident);
-      if (this.relayDelivery) {
-        await this.relayDelivery.save(this.relayDelivery.create({ incidentId: saved.id, eventType: "OPEN", status: "PENDING", retryCount: 0 }));
-      }
-      return saved;
+      return await this.incidentRepository.save(incident);
     } catch (error) {
       if (this.isDuplicateKey(error)) {
         const concurrent = await this.incidentRepository.findOpenByActiveFingerprint(signal.fingerprint);
@@ -122,15 +107,10 @@ export class AlertingService {
 
     if (!incident) return null;
 
-    if (this.relayDelivery) {
-      await this.relayDelivery.cancelOpen(incident.id);
-      await this.relayDelivery.save(this.relayDelivery.create({ incidentId: incident.id, eventType: "RESOLVED", status: "PENDING", retryCount: 0 }));
-    }
-
     try {
       await this.notifier.send({ kind: "RESOLVED", incident });
     } catch (error) {
-      console.error(`Failed to send RESOLVED alert for incident ${incident.publicId}`, error);
+      console.error(`Failed to queue RESOLVED alert for incident ${incident.publicId}`, error);
     }
 
     return incident;
@@ -154,7 +134,8 @@ export class AlertingService {
 
   private isDuplicateKey(error: unknown): boolean {
     if (!error || typeof error !== "object") return false;
-    const candidate = error as { code?: string; errno?: number };
-    return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
+    // PostgreSQL unique_violation (SQLSTATE 23505).
+    const candidate = error as { code?: string; driverError?: { code?: string } };
+    return candidate.code === "23505" || candidate.driverError?.code === "23505";
   }
 }

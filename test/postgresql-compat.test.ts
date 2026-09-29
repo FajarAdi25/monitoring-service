@@ -1,31 +1,8 @@
-// Version: 2.6.0
+// Version: 2.7.1
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DataSource } from "typeorm";
-import { telegramUserMiddleware } from "../src/common/middleware/telegram-user.middleware";
 import { MonitoringSnapshotRepository } from "../src/modules/monitoring/monitoring-snapshot.repository";
-
-function runTelegramUserMiddleware(userId: unknown): unknown {
-  let forwarded: unknown;
-  telegramUserMiddleware(
-    { body: { user: { id: userId, name: "Operator" } } } as never,
-    {} as never,
-    ((error?: unknown) => {
-      forwarded = error;
-    }) as never,
-  );
-  return forwarded;
-}
-
-test("rejects Telegram user ids above PostgreSQL signed BIGINT maximum", () => {
-  const error = runTelegramUserMiddleware("9223372036854775808");
-  assert.ok(error instanceof Error);
-});
-
-test("accepts PostgreSQL signed BIGINT maximum Telegram user id", () => {
-  const error = runTelegramUserMiddleware("9223372036854775807");
-  assert.equal(error, undefined);
-});
 
 test("monitoring snapshot raw query uses PostgreSQL positional parameters and preserves resourceKey alias", async () => {
   let capturedSql = "";
@@ -67,5 +44,5 @@ test("TypeORM datasource is PostgreSQL and defaults to port 5432", async () => {
 
   assert.equal(AppDataSource.options.type, "postgres");
   assert.equal(env.db.port, 5432);
-  assert.equal(AppDataSource.migrations.length, 1);
+  assert.equal(AppDataSource.options.migrations?.length, 5);
 });

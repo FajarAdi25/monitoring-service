@@ -1,4 +1,4 @@
-// Version: 2.6.0
+// Version: 2.7.1
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { env } from "../config/env";
@@ -8,8 +8,12 @@ import { ResolutionTimeEntity } from "../modules/incidents/resolution-time.entit
 import { MonitoringCurrentStateEntity } from "../modules/monitoring/monitoring-current-state.entity";
 import { MonitoringSnapshotEntity } from "../modules/monitoring/monitoring-snapshot.entity";
 import { SslMonitoringEntity } from "../modules/ssl-certificate/ssl-monitoring.entity";
-import { RelayDeliveryEntity } from "../modules/alerting/relay/relay-delivery.entity";
 import { CreatePostgresBaseline1789359000000 } from "./migrations/1789359000000-CreatePostgresBaseline";
+import { AddIsActiveToClustersAndSslMonitoring1790000000000 } from "./migrations/1790000000000-AddIsActiveToClustersAndSslMonitoring";
+import { DropIncidentAcknowledgePostpone1790000100000 } from "./migrations/1790000100000-DropIncidentAcknowledgePostpone";
+import { DropRelayDeliveries1790000200000 } from "./migrations/1790000200000-DropRelayDeliveries";
+import { CreateAlertDeliveries1790000300000 } from "./migrations/1790000300000-CreateAlertDeliveries";
+import { AlertDeliveryEntity } from "../modules/alerting/alert-delivery.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -25,9 +29,15 @@ export const AppDataSource = new DataSource({
     MonitoringSnapshotEntity,
     MonitoringCurrentStateEntity,
     SslMonitoringEntity,
-    RelayDeliveryEntity,
+    AlertDeliveryEntity,
   ],
-  migrations: [CreatePostgresBaseline1789359000000],
+  migrations: [
+    CreatePostgresBaseline1789359000000,
+    AddIsActiveToClustersAndSslMonitoring1790000000000,
+    DropIncidentAcknowledgePostpone1790000100000,
+    DropRelayDeliveries1790000200000,
+    CreateAlertDeliveries1790000300000,
+  ],
   synchronize: false,
   logging: false,
 });

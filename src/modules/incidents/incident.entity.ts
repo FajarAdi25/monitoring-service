@@ -1,4 +1,4 @@
-// Version: 2.6.0
+// Version: 2.7.0
 import {
   Column,
   CreateDateColumn,
@@ -17,7 +17,6 @@ import { ResolutionTimeEntity } from "./resolution-time.entity";
 @Index("uq_incidents_active_fingerprint", ["activeFingerprint"], { unique: true })
 @Index("idx_incidents_status_opened_at", ["status", "openedAt"])
 @Index("idx_incidents_resolved_at", ["resolvedAt"])
-@Index("idx_incidents_postpone_until", ["status", "postponeUntil"])
 export class IncidentEntity {
   @PrimaryGeneratedColumn({ type: "bigint" })
   id!: string;
@@ -75,39 +74,6 @@ export class IncidentEntity {
 
   @Column({ name: "reminder_count", type: "int", default: 0 })
   reminderCount!: number;
-
-  @Column({ name: "acknowledged_at", type: "timestamp", precision: 3, nullable: true })
-  acknowledgedAt!: Timestamp | null;
-
-  @Column({ name: "acknowledged_by", type: "bigint", nullable: true })
-  acknowledgedBy!: string | null;
-
-  @Column({ name: "acknowledged_by_user_name", type: "varchar", length: 255, nullable: true })
-  acknowledgedByUserName!: string | null;
-
-  @Column({ name: "acknowledged_by_username", type: "varchar", length: 255, nullable: true })
-  acknowledgedByUsername!: string | null;
-
-  @Column({ name: "acknowledgement_note", type: "text", nullable: true })
-  acknowledgementNote!: string | null;
-
-  @Column({ name: "postponed_at", type: "timestamp", precision: 3, nullable: true })
-  postponedAt!: Timestamp | null;
-
-  @Column({ name: "postponed_by", type: "bigint", nullable: true })
-  postponedBy!: string | null;
-
-  @Column({ name: "postponed_by_user_name", type: "varchar", length: 255, nullable: true })
-  postponedByUserName!: string | null;
-
-  @Column({ name: "postponed_by_username", type: "varchar", length: 255, nullable: true })
-  postponedByUsername!: string | null;
-
-  @Column({ name: "postpone_until", type: "timestamp", precision: 3, nullable: true })
-  postponeUntil!: Timestamp | null;
-
-  @Column({ name: "postpone_remark", type: "text", nullable: true })
-  postponeRemark!: string | null;
 
   @Column({ name: "resolved_at", type: "timestamp", precision: 3, nullable: true })
   resolvedAt!: Timestamp | null;

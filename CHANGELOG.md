@@ -1,3 +1,80 @@
+## v2.7.1 - REINTAKE Alert Contract v1.0 Compliance
+
+- `entity.type` now uses contract enum values: NODE / DRIVER = `nomad_node`, ALLOCATION / EVALUATION = `other`, SSL = `cluster`.
+- `entity.host_key` is the lowercase short node name for NODE / DRIVER and `""` for other resources.
+- `fingerprint` now uses the resource key: `hashicorp|<entity.type>|<resource key>|<type>`.
+- `entity.ip` is omitted instead of `null` when not available.
+- `context` and `dimensions` are string-to-string maps (max 20 keys, values max 256 chars). `context` contains selected keys per resource type instead of the full incident context.
+- RESOLVED `updated_at_ms` uses `resolved_at`, so it is newer than the last firing record.
+- REMINDER batches use `delivery_mode: "poll_reconcile"`.
+- Long values are truncated to contract limits (`source_instance`, `title`, `description`, `entity.*`, map values).
+- Added `alert_deliveries` outbox (migration `1790000300000-CreateAlertDeliveries.ts`). Retries resend the same `batch_id`; `503` retries after `Retry-After`, `500` and network errors retry with backoff, other errors are marked `FAILED` without retry. RESOLVED alerts are now retried too.
+- Rejected records in a `202` response are logged and stored in `alert_deliveries.last_error`.
+- One alert record per batch is kept.
+- Updated backend image version to `monitoring-service:2.7.1`.
+- No incident lifecycle, reminder interval, Nomad, SSL check, or API changes.
+
+## v2.7.0 - Cluster Active Flag and HashiCorp Alert Webhook
+
+### Added
+
+- `clusters.is_active` (default `TRUE`) to disable a cluster without deleting data. Inactive clusters are skipped by the Nomad pull, the SSL check, and the Nomad API (`CLUSTER_NOT_FOUND`), and reminders for their OPEN incidents are paused. Existing data stays visible.
+- `ssl_monitoring.is_active` (default `TRUE`). When `FALSE`, the SSL check stops for that cluster and the row is hidden from `GET /api/v1/monitoring/ssl` and the dashboard SSL summary.
+- Migration `1790000000000-AddIsActiveToClustersAndSslMonitoring.ts`.
+- `ALERT_WEBHOOK_TOKEN`, sent as `Authorization: Bearer <token>`.
+- DRIVER incident context now includes `nodeAddress` (used for `entity.ip`).
+
+### Changed
+
+- INITIAL, REMINDER, and RESOLVED alerts now use the HashiCorp alert schema (`schema_version` `1.0`, one alert per request) sent to `ALERT_WEBHOOK_URL`. INITIAL/REMINDER map to `firing`, RESOLVED maps to `resolved`.
+- Reminder interval: CRITICAL every 1 minute, MAJOR/WARNING every 5 minutes, SSL every 24 hours (the ACK-based 3-minute interval is removed).
+- `GET /api/v1/dashboard/incidents/summary` returns only `open.total` under `open`.
+
+### Removed
+
+- Telegram alert webhook payload and the dummy endpoint `POST /api/v1/webhooks/telegram/dummy`.
+- ACK and POSTPONE: `POST /api/v1/incidents/:incidentId/acknowledge`, `POST /api/v1/incidents/:incidentId/postpone`, the Telegram Bot Service auth and user middleware, ACK/POSTPONE fields in incident responses, and the `acknowledged`/`postponed` query filters.
+- Migration `1790000100000-DropIncidentAcknowledgePostpone.ts` drops the `acknowledged_*` and `postpone*` columns and `idx_incidents_postpone_until`. Existing ACK/POSTPONE data is deleted.
+- Relay webhook (`RELAY_WEBHOOK_URL`, `RELAY_WEBHOOK_API_KEY`) and its retry worker. Migration `1790000200000-DropRelayDeliveries.ts` drops `relay_deliveries`.
+- `--add-host` from the Dev `docker run` example; `.env.docker.dev` no longer uses `host.docker.internal`.
+
+- Updated backend image version to `monitoring-service:2.7.0`.
+
+## v2.6.5 - Remove Compose-Only Port Variables
+
+- Removed `APP_BIND_IP` and `APP_HOST_PORT` from `.env.docker.dev.example` and `.env.docker.local.example`; they were used only by Docker Compose and are not read by the application.
+- Host port binding is set through `docker run -p` as documented in the README.
+- Updated backend image version to `monitoring-service:2.6.5`.
+- No application code, database schema, migration, API, or alerting behavior changes.
+
+## v2.6.4 - PostgreSQL Docker Environment Examples
+
+- Updated `.env.docker.local.example` for PostgreSQL in a separate Docker container on the same host: `DB_PORT=5432`, `DB_USERNAME=monitoring`.
+- Updated `.env.docker.dev.example` for PostgreSQL on a separate server: `DB_HOST=10.10.10.20`, `DB_PORT=5432`.
+- Replaced the database password in `.env.docker.dev.example` with the placeholder `CHANGE_ME`.
+- Removed MySQL and Docker Compose comments from both example files.
+- Updated backend image version to `monitoring-service:2.6.4`.
+- No application code, database schema, migration, API, or alerting behavior changes.
+
+## v2.6.3 - Docker Run Deployment Without Compose
+
+- Removed `docker-compose.yml`, `compose.local.yml`, and `compose.dev.yml`; Docker Compose is no longer used.
+- Documented `docker run` per environment: Local uses `.env.docker.local` (PostgreSQL in a separate Docker container on the same host), Dev uses `.env.docker.dev` (PostgreSQL on a separate server).
+- `docker run` examples keep the former Compose settings `--init` and `--add-host=host.docker.internal:host-gateway`.
+- Updated backend image version to `monitoring-service:2.6.3`.
+- No application code, database schema, migration, API, or alerting behavior changes.
+
+## v2.6.2 - PostgreSQL and Runtime Wiring Fixes
+
+- Fixed duplicate key detection for PostgreSQL (`23505` unique violation) in incident creation race handling.
+- Fixed Relay webhook wiring: `RELAY_WEBHOOK_URL` and `RELAY_WEBHOOK_API_KEY` are now passed to the alerting module.
+- Restored `userMiddleware` so the ADMIN-only `POST /api/v1/nomad/pull` endpoint receives `req.user`.
+- Removed hardcoded database and Basic Auth values from `src/config/env.ts`; restored `DB_PORT` default `5432`.
+- Restored `.gitignore` rule for `docker/certs/*` with `!docker/certs/.gitkeep`.
+- Removed README references to the deleted `docs/` directory.
+- Updated backend image version to `monitoring-service:2.6.2`.
+- No database schema, migration, API contract, alert lifecycle, Nomad behavior, or SSL behavior changes.
+
 ## v2.6.1 - External PostgreSQL Deployment
 
 - Removed Docker Compose deployment files.

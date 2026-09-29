@@ -1,7 +1,6 @@
 import { IncidentRepository } from "../incidents/incident.repository";
+import type { AlertDeliverySender } from "./alert-delivery.sender";
 import type { AlertNotifier } from "./alerting.notifier";
-import type { IncidentWebhookNotifier } from "./incident-webhook.notifier";
-import type { RelayDeliveryRepository } from "./relay/relay-delivery.repository";
 
 export class AlertingWorker {
   private timer: NodeJS.Timeout | null = null;
@@ -10,10 +9,9 @@ export class AlertingWorker {
   constructor(
     private readonly incidentRepository: IncidentRepository,
     private readonly notifier: AlertNotifier,
+    private readonly sender: AlertDeliverySender,
     private readonly pollIntervalMs: number,
-    private readonly openReminderIntervalMs: number,
-    private readonly relayWebhook?: IncidentWebhookNotifier,
-    private readonly relayDelivery?: RelayDeliveryRepository
+    private readonly openReminderIntervalMs: number
   ) {}
 
   start(): void {
@@ -36,30 +34,9 @@ export class AlertingWorker {
 
     try {
       await this.processOpenNotifications(now);
-      await this.processRelayDelivery(now);
+      await this.sender.processDue(now);
     } finally {
       this.running = false;
-    }
-  }
-
-  private async processRelayDelivery(now: Date): Promise<void> {
-    if (!this.relayDelivery || !this.relayWebhook) return;
-    const deliveries = await this.relayDelivery.findPending(100);
-    for (const delivery of deliveries) {
-      try {
-        const incident = await this.incidentRepository.findById(delivery.incidentId);
-        if (!incident) continue;
-        if (delivery.eventType === "OPEN") await this.relayWebhook.sendOpened(incident);
-        else await this.relayWebhook.sendResolved(incident);
-        delivery.status = "SUCCESS";
-        delivery.lastError = null;
-      } catch (error) {
-        delivery.status = "FAILED";
-        delivery.retryCount += 1;
-        delivery.lastError = error instanceof Error ? error.message : String(error);
-        delivery.nextRetryAt = new Date(now.getTime() + 60000);
-      }
-      await this.relayDelivery.save(delivery);
     }
   }
 
@@ -74,11 +51,7 @@ export class AlertingWorker {
 
         await this.notifier.send({ kind, incident });
 
-        const regularNextNotificationAt = new Date(now.getTime() + this.getReminderIntervalMs(incident));
-        const nextNotificationAt = incident.postponeUntil !== null
-          && incident.postponeUntil.getTime() > now.getTime()
-          ? incident.postponeUntil
-          : regularNextNotificationAt;
+        const nextNotificationAt = new Date(now.getTime() + this.getReminderIntervalMs(incident));
 
         await this.incidentRepository.markNotificationSent(
           incident.publicId,
@@ -87,14 +60,13 @@ export class AlertingWorker {
           kind === "REMINDER"
         );
       } catch (error) {
-        console.error(`Failed to send alert for incident ${incident.publicId}`, error);
+        console.error(`Failed to queue alert for incident ${incident.publicId}`, error);
       }
     }
   }
 
-  private getReminderIntervalMs(incident: { type: string; severity: string; acknowledgedAt: Date | null }): number {
+  private getReminderIntervalMs(incident: { type: string; severity: string }): number {
     if (incident.type === "SSL_CERTIFICATE_EXPIRING") return 24 * 60 * 60 * 1000;
-    if (incident.acknowledgedAt !== null) return 3 * 60 * 1000;
     if (incident.severity === "CRITICAL") return 60 * 1000;
     return 5 * 60 * 1000;
   }

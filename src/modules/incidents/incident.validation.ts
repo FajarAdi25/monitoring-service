@@ -15,13 +15,6 @@ function positiveInt(value: unknown, fallback: number, max: number): number {
   return parsed;
 }
 
-function bool(value: unknown): boolean | undefined {
-  if (value === undefined) return undefined;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  throw new AppError(400, "INVALID_QUERY", "acknowledged must be true or false.");
-}
-
 function date(value: unknown): Date | undefined {
   const raw = one(value);
   if (!raw) return undefined;
@@ -47,7 +40,6 @@ export function parseIncidentListFilters(query: Record<string, unknown>): Incide
     type: one(query.type),
     severity: enumValue(query.severity, IncidentSeverity, "severity"),
     status: enumValue(query.status, IncidentStatus, "status"),
-    acknowledged: bool(query.acknowledged),
     resourceType: one(query.resourceType),
     from: date(query.from),
     to: date(query.to),
@@ -56,37 +48,4 @@ export function parseIncidentListFilters(query: Record<string, unknown>): Incide
   };
 }
 
-export function parseAcknowledgeBody(body: unknown): { note?: string } {
-  if (body === undefined || body === null) return {};
-  if (typeof body !== "object") throw new AppError(400, "INVALID_REQUEST", "Request body must be an object.");
-  const input = body as Record<string, unknown>;
-  if (input.note !== undefined && typeof input.note !== "string") throw new AppError(400, "INVALID_REQUEST", "note must be a string.");
-  return { note: input.note as string | undefined };
-}
-
-export function parsePostponeBody(body: unknown): { postponeUntil: Date; remark?: string } {
-  if (!body || typeof body !== "object") {
-    throw new AppError(400, "INVALID_REQUEST", "Request body is required.");
-  }
-
-  const input = body as Record<string, unknown>;
-  if (typeof input.postponeUntil !== "string" || input.postponeUntil.trim() === "") {
-    throw new AppError(400, "INVALID_REQUEST", "postponeUntil is required and must be an ISO datetime string.");
-  }
-
-  const postponeUntil = new Date(input.postponeUntil);
-  if (Number.isNaN(postponeUntil.getTime())) {
-    throw new AppError(400, "INVALID_REQUEST", "postponeUntil must be a valid datetime.");
-  }
-
-  if (input.remark !== undefined && typeof input.remark !== "string") {
-    throw new AppError(400, "INVALID_REQUEST", "remark must be a string.");
-  }
-
-  return {
-    postponeUntil,
-    remark: input.remark as string | undefined
-  };
-}
-
-export const queryHelpers = { one, positiveInt, bool, date, enumValue };
+export const queryHelpers = { one, positiveInt, date, enumValue };

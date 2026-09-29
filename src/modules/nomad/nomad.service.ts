@@ -97,10 +97,10 @@ export class NomadService {
   }
 
   private async selectedClusters(clusterId?: string): Promise<ClusterEntity[]> {
-    if (!clusterId) return this.clusters.findAll();
+    if (!clusterId) return this.clusters.findActive();
     const cluster = await this.clusters.findById(clusterId);
-    if (!cluster) {
-      throw new AppError(404, "CLUSTER_NOT_FOUND", `Cluster ${clusterId} was not found.`);
+    if (!cluster || !cluster.isActive) {
+      throw new AppError(404, "CLUSTER_NOT_FOUND", `Cluster ${clusterId} was not found or is inactive.`);
     }
     return [cluster];
   }
@@ -309,6 +309,7 @@ export class NomadService {
           context: {
             nodeId: node.ID,
             nodeName: node.Name,
+            nodeAddress: node.Address ?? null,
             driver: driverName,
             ...this.asPayload(driver)
           },

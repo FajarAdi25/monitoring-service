@@ -6,14 +6,6 @@ function one(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
-function bool(value: unknown, field: string): boolean | undefined {
-  const raw = one(value);
-  if (raw === undefined) return undefined;
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  throw new AppError(400, "INVALID_QUERY", `${field} must be true or false.`);
-}
-
 function positiveInt(value: unknown, fallback: number, max: number): number {
   const raw = one(value);
   if (raw === undefined) return fallback;
@@ -53,8 +45,6 @@ export interface DashboardRecentFilters {
   status?: IncidentStatus;
   severity?: IncidentSeverity;
   type?: string;
-  acknowledged?: boolean;
-  postponed?: boolean;
   limit: number;
   from?: Date;
   to?: Date;
@@ -87,8 +77,6 @@ export function parseDashboardRecentQuery(query: Record<string, unknown>): Dashb
     status: enumValue(query.status, IncidentStatus, "status"),
     severity: enumValue(query.severity, IncidentSeverity, "severity"),
     type: one(query.type),
-    acknowledged: bool(query.acknowledged, "acknowledged"),
-    postponed: bool(query.postponed, "postponed"),
     from: date(query.from, "from"),
     to: date(query.to, "to"),
     limit: positiveInt(query.limit, 20, 100)

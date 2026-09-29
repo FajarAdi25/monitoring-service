@@ -10,7 +10,7 @@ export interface ClusterMetadata {
 }
 
 export interface ClusterRepositoryPort {
-  findAll(): Promise<ClusterEntity[]>;
+  findActive(): Promise<ClusterEntity[]>;
   findSslMonitoringEnabled(): Promise<ClusterEntity[]>;
   findById(clusterId: string): Promise<ClusterEntity | null>;
   findMetadataById(clusterId: string): Promise<ClusterMetadata | null>;

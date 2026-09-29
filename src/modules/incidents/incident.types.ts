@@ -7,7 +7,6 @@ export interface IncidentListFilters {
   type?: string;
   severity?: IncidentSeverity;
   status?: IncidentStatus;
-  acknowledged?: boolean;
   resourceType?: string;
   from?: Date;
   to?: Date;

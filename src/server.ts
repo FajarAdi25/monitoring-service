@@ -11,7 +11,8 @@ async function bootstrap(): Promise<void> {
   const alerting = createAlertingModule(AppDataSource, {
     pollIntervalMs: env.alerting.pollIntervalMs,
     openReminderIntervalMs: env.alerting.openReminderIntervalMs,
-    webhookUrl: env.alerting.webhookUrl
+    webhookUrl: env.alerting.webhookUrl,
+    webhookToken: env.alerting.webhookToken
   });
 
   const nomad = createNomadModule(AppDataSource, alerting.service, {
@@ -36,7 +37,7 @@ async function bootstrap(): Promise<void> {
     console.log(`Alerting worker active; poll=${env.alerting.pollIntervalMs}ms; openReminder=${env.alerting.openReminderIntervalMs}ms`);
 
     sslCertificate.worker.start();
-    console.log("SSL certificate monitoring active for clusters with ssl_monitoring=true; check interval=24h; expiry threshold=30d");
+    console.log("SSL certificate monitoring active for active clusters with ssl_monitoring=true; check interval=24h; expiry threshold=30d");
 
     if (env.nomad.enabled) {
       nomad.worker.start();

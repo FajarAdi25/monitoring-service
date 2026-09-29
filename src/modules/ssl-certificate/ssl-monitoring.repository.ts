@@ -1,4 +1,4 @@
-// Version: 2.3.0
+// Version: 2.7.0
 import type { DataSource, Repository } from "typeorm";
 import { SslMonitoringEntity } from "./ssl-monitoring.entity";
 
@@ -22,6 +22,7 @@ export class SslMonitoringRepository {
 
   list(): Promise<SslMonitoringEntity[]> {
     return this.repository.find({
+      where: { isActive: true },
       order: { expiresAt: "ASC", clusterId: "ASC" }
     });
   }

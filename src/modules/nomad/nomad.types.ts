@@ -15,7 +15,9 @@ export interface NomadNode {
   Name: string;
   Status: string;
   StatusDescription?: string;
+  Address?: string;
   Datacenter?: string;
+  NodePool?: string;
   Drivers?: Record<string, NomadDriverState> | null;
   [key: string]: unknown;
 }

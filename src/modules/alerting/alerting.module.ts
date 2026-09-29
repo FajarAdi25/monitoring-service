@@ -2,14 +2,15 @@ import type { DataSource } from "typeorm";
 import { ClusterRepository } from "../clusters/cluster.repository";
 import { IncidentRepository } from "../incidents/incident.repository";
 import { IncidentService } from "../incidents/incident.service";
+import { AlertDeliveryRepository } from "./alert-delivery.repository";
+import { AlertDeliverySender } from "./alert-delivery.sender";
 import {
-  ConsoleAlertNotifier,
-  HttpWebhookAlertNotifier,
+  ConsoleAlertWebhookTransport,
+  HttpAlertWebhookTransport,
+  QueuedAlertNotifier,
 } from "./alerting.notifier";
-import { HttpIncidentWebhookNotifier } from "./incident-webhook.notifier";
 import { AlertingService } from "./alerting.service";
 import { AlertingWorker } from "./alerting.worker";
-import { RelayDeliveryRepository } from "./relay/relay-delivery.repository";
 
 export interface AlertingModule {
   service: AlertingService;
@@ -20,8 +21,7 @@ export interface AlertingModuleConfig {
   pollIntervalMs: number;
   openReminderIntervalMs: number;
   webhookUrl?: string;
-  relayWebhookUrl?: string;
-  relayWebhookApiKey?: string;
+  webhookToken?: string;
 }
 
 export function createAlertingModule(
@@ -34,34 +34,26 @@ export function createAlertingModule(
     incidentRepository,
     clusterRepository,
   );
-  const relayDeliveryRepository = new RelayDeliveryRepository(dataSource);
-  const relayWebhook = config.relayWebhookUrl
-    ? new HttpIncidentWebhookNotifier(
-        clusterRepository,
-        config.relayWebhookUrl,
-        config.relayWebhookApiKey,
-      )
-    : undefined;
+  const deliveryRepository = new AlertDeliveryRepository(dataSource);
 
-  const notifier = config.webhookUrl
-    ? new HttpWebhookAlertNotifier(clusterRepository, config.webhookUrl)
-    : new ConsoleAlertNotifier(clusterRepository);
+  const notifier = new QueuedAlertNotifier(clusterRepository, deliveryRepository);
+  const transport = config.webhookUrl
+    ? new HttpAlertWebhookTransport(config.webhookUrl, config.webhookToken)
+    : new ConsoleAlertWebhookTransport();
+  const sender = new AlertDeliverySender(deliveryRepository, transport);
 
   return {
     service: new AlertingService(
       incidentRepository,
       incidentService,
       notifier,
-      relayWebhook,
-      relayDeliveryRepository,
     ),
     worker: new AlertingWorker(
       incidentRepository,
       notifier,
+      sender,
       config.pollIntervalMs,
       config.openReminderIntervalMs,
-      relayWebhook,
-      relayDeliveryRepository,
     ),
   };
 }

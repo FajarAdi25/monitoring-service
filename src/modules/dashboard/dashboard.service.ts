@@ -1,4 +1,4 @@
-// Version: 2.5.0
+// Version: 2.7.0
 import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { IncidentSeverity } from "../incidents/incident.enums";
 import { mapIncidentListItem } from "../incidents/incident.mapper";
@@ -70,9 +70,6 @@ export class DashboardService {
     return {
       open: {
         total: result.activeTotal,
-        unacknowledged: result.unacknowledged,
-        acknowledged: result.acknowledged,
-        postponed: result.postponed,
       },
       resolved: {
         today: result.resolvedToday,
@@ -96,10 +93,7 @@ export class DashboardService {
 
   async recent(query: Record<string, unknown>) {
     const filters = parseDashboardRecentQuery(query);
-    const items = await this.incidents.recent({
-      ...filters,
-      now: new Date(),
-    });
+    const items = await this.incidents.recent(filters);
 
     const metadataById = await this.clusters.findMetadataByIds(
       items.map((item) => item.clusterId),

@@ -1,7 +1,8 @@
-// Version: 2.5.5
+// Version: 2.7.0
 import express from "express";
 import { AppDataSource } from "./database/data-source";
 import { basicAuthMiddleware } from "./common/middleware/basic-auth.middleware";
+import { userMiddleware } from "./common/middleware/user.middleware";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
@@ -25,8 +26,6 @@ import { createMonitoringRouter } from "./modules/monitoring/monitoring-snapshot
 import { NomadController } from "./modules/nomad/nomad.controller";
 import { createNomadRouter } from "./modules/nomad/nomad.routes";
 import type { NomadService } from "./modules/nomad/nomad.service";
-import { TelegramDummyWebhookController } from "./modules/webhooks/telegram-dummy.controller";
-import { createWebhookRouter } from "./modules/webhooks/webhook.routes";
 import { SslMonitoringRepository } from "./modules/ssl-certificate/ssl-monitoring.repository";
 import { SslMonitoringService } from "./modules/ssl-certificate/ssl-monitoring.service";
 import { SslMonitoringController } from "./modules/ssl-certificate/ssl-monitoring.controller";
@@ -42,6 +41,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use(cors({ origin: false }));
   app.use(rateLimit({ windowMs: 60 * 1000, max: 100 }));
   app.use(basicAuthMiddleware);
+  app.use(userMiddleware);
 
   const clusterRepository = new ClusterRepository(AppDataSource);
   const incidentRepository = new IncidentRepository(AppDataSource);
@@ -69,7 +69,6 @@ export function createApp(dependencies: AppDependencies) {
   const dashboardController = new DashboardController(dashboardService);
 
   const nomadController = new NomadController(dependencies.nomadService);
-  const telegramDummyWebhookController = new TelegramDummyWebhookController();
 
   app.use("/api/v1/incidents", createIncidentRouter(incidentController));
   app.use("/api/v1/dashboard", createDashboardRouter(dashboardController));
@@ -78,7 +77,6 @@ export function createApp(dependencies: AppDependencies) {
     createMonitoringRouter(snapshotController, currentStateController, sslMonitoringController)
   );
   app.use("/api/v1/nomad", createNomadRouter(nomadController));
-  app.use("/api/v1/webhooks", createWebhookRouter(telegramDummyWebhookController));
 
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);

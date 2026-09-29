@@ -1,4 +1,4 @@
-// Version: 2.6.0
+// Version: 2.7.0
 import {
   Column,
   CreateDateColumn,
@@ -38,6 +38,9 @@ export class SslMonitoringEntity {
 
   @Column({ name: "last_checked_at", type: "timestamp", precision: 3 })
   lastCheckedAt!: Timestamp;
+
+  @Column({ name: "is_active", type: "boolean", default: true })
+  isActive!: boolean;
 
   @CreateDateColumn({ name: "created_at", type: "timestamp", precision: 3 })
   createdAt!: Timestamp;

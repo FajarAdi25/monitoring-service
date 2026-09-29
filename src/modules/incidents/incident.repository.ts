@@ -1,4 +1,4 @@
-import { DataSource, DeepPartial, LessThanOrEqual, Repository } from "typeorm";
+import { DataSource, DeepPartial, Repository } from "typeorm";
 import { IncidentEntity } from "./incident.entity";
 import { IncidentSeverity, IncidentStatus } from "./incident.enums";
 import type { IncidentListFilters } from "./incident.types";
@@ -31,15 +31,16 @@ export class IncidentRepository {
     return this.repository.save(incident);
   }
 
+  /** Due OPEN notifications for active clusters only; reminders pause while a cluster is inactive. */
   findDueOpenNotifications(now: Date, limit: number): Promise<IncidentEntity[]> {
-    return this.repository.find({
-      where: {
-        status: IncidentStatus.OPEN,
-        nextNotificationAt: LessThanOrEqual(now)
-      },
-      order: { nextNotificationAt: "ASC" },
-      take: limit
-    });
+    return this.repository.createQueryBuilder("incident")
+      .innerJoin("clusters", "cluster", "cluster.cluster_id = incident.cluster_id")
+      .where("incident.status = :status", { status: IncidentStatus.OPEN })
+      .andWhere("incident.next_notification_at <= :now", { now })
+      .andWhere("cluster.is_active = TRUE")
+      .orderBy("incident.nextNotificationAt", "ASC")
+      .take(limit)
+      .getMany();
   }
 
   async markNotificationSent(
@@ -75,9 +76,6 @@ export class IncidentRepository {
     if (filters.severity) qb.andWhere("incident.severity = :severity", { severity: filters.severity });
     if (filters.status) qb.andWhere("incident.status = :status", { status: filters.status });
     if (filters.resourceType) qb.andWhere("incident.resource_type = :resourceType", { resourceType: filters.resourceType });
-    if (filters.acknowledged !== undefined) {
-      qb.andWhere(filters.acknowledged ? "incident.acknowledged_at IS NOT NULL" : "incident.acknowledged_at IS NULL");
-    }
     if (filters.from) qb.andWhere("incident.opened_at >= :from", { from: filters.from });
     if (filters.to) qb.andWhere("incident.opened_at <= :to", { to: filters.to });
 
@@ -95,10 +93,7 @@ export class IncidentRepository {
     status?: IncidentStatus;
     severity?: IncidentSeverity;
     type?: string;
-    acknowledged?: boolean;
-    postponed?: boolean;
     limit: number;
-    now: Date;
   }): Promise<IncidentEntity[]> {
     const qb = this.repository.createQueryBuilder("incident");
 
@@ -107,19 +102,6 @@ export class IncidentRepository {
     if (input.status) qb.andWhere("incident.status = :status", { status: input.status });
     if (input.severity) qb.andWhere("incident.severity = :severity", { severity: input.severity });
     if (input.type) qb.andWhere("incident.type = :type", { type: input.type });
-    if (input.acknowledged !== undefined) {
-      qb.andWhere(input.acknowledged ? "incident.acknowledged_at IS NOT NULL" : "incident.acknowledged_at IS NULL");
-    }
-    if (input.postponed === true) {
-      qb.andWhere("incident.status = :postponedStatus", { postponedStatus: IncidentStatus.OPEN });
-      qb.andWhere("incident.postpone_until IS NOT NULL");
-      qb.andWhere("incident.postpone_until > :postponeNow", { postponeNow: input.now });
-    } else if (input.postponed === false) {
-      qb.andWhere(
-        "(incident.status <> :postponedStatus OR incident.postpone_until IS NULL OR incident.postpone_until <= :postponeNow)",
-        { postponedStatus: IncidentStatus.OPEN, postponeNow: input.now }
-      );
-    }
 
     return qb.orderBy("incident.openedAt", "DESC").take(input.limit).getMany();
   }
@@ -154,9 +136,6 @@ export class IncidentRepository {
 
   async countSummary(input: { clusterId?: string; site?: string; from?: Date; to?: Date }, now = new Date()): Promise<{
     activeTotal: number;
-    acknowledged: number;
-    unacknowledged: number;
-    postponed: number;
     resolvedToday: number;
     resolvedLast24Hours: number;
     bySeverity: Record<string, number>;
@@ -175,16 +154,6 @@ export class IncidentRepository {
 
     const activeQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.OPEN });
-    const acknowledgedQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
-      .where("i.status = :s", { s: IncidentStatus.OPEN })
-      .andWhere("i.acknowledged_at IS NOT NULL");
-    const unacknowledgedQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
-      .where("i.status = :s", { s: IncidentStatus.OPEN })
-      .andWhere("i.acknowledged_at IS NULL");
-    const postponedQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
-      .where("i.status = :s", { s: IncidentStatus.OPEN })
-      .andWhere("i.postpone_until IS NOT NULL")
-      .andWhere("i.postpone_until > :now", { now });
     const resolvedTodayQb = this.repository.createQueryBuilder("i").leftJoin("clusters", "cluster", "cluster.cluster_id = i.cluster_id")
       .where("i.status = :s", { s: IncidentStatus.RESOLVED })
       .andWhere("i.resolved_at >= :start", { start: startOfToday });
@@ -193,31 +162,28 @@ export class IncidentRepository {
       .andWhere("i.resolved_at >= :start", { start: last24Hours });
 
     if (input.site) {
-      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+      for (const qb of [activeQb, resolvedTodayQb, resolvedLast24Qb]) {
         qb.andWhere("cluster.site = :site", { site: input.site });
       }
     }
     if (input.clusterId) {
-      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+      for (const qb of [activeQb, resolvedTodayQb, resolvedLast24Qb]) {
         qb.andWhere("i.cluster_id = :clusterId", { clusterId: input.clusterId });
       }
     }
     if (input.from) {
-      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+      for (const qb of [activeQb, resolvedTodayQb, resolvedLast24Qb]) {
         qb.andWhere("i.opened_at >= :from", { from: input.from });
       }
     }
     if (input.to) {
-      for (const qb of [activeQb, acknowledgedQb, unacknowledgedQb, postponedQb, resolvedTodayQb, resolvedLast24Qb]) {
+      for (const qb of [activeQb, resolvedTodayQb, resolvedLast24Qb]) {
         qb.andWhere("i.opened_at <= :to", { to: input.to });
       }
     }
 
-    const [activeTotal, acknowledged, unacknowledged, postponed, resolvedToday, resolvedLast24Hours] = await Promise.all([
+    const [activeTotal, resolvedToday, resolvedLast24Hours] = await Promise.all([
       activeQb.getCount(),
-      acknowledgedQb.getCount(),
-      unacknowledgedQb.getCount(),
-      postponedQb.getCount(),
       resolvedTodayQb.getCount(),
       resolvedLast24Qb.getCount()
     ]);
@@ -260,18 +226,10 @@ export class IncidentRepository {
 
     return {
       activeTotal,
-      acknowledged,
-      unacknowledged,
-      postponed,
       resolvedToday,
       resolvedLast24Hours,
       bySeverity: toRecord(severityRows),
       byType: toRecord(typeRows)
     };
-  }
-
-
-  findById(id: string): Promise<IncidentEntity | null> {
-    return this.repository.findOne({ where: { id } });
   }
 }

@@ -10,15 +10,22 @@ export class ClusterRepository implements ClusterRepositoryPort {
     this.repository = dataSource.getRepository(ClusterEntity);
   }
 
-  findAll(): Promise<ClusterEntity[]> {
-    return this.repository.find({ order: { clusterId: "ASC" } });
-  }
-
-  findSslMonitoringEnabled(): Promise<ClusterEntity[]> {
+  findActive(): Promise<ClusterEntity[]> {
     return this.repository.find({
-      where: { sslMonitoring: true },
+      where: { isActive: true },
       order: { clusterId: "ASC" }
     });
+  }
+
+  /** Active clusters with ssl_monitoring enabled, excluding those whose ssl_monitoring row is inactive. */
+  findSslMonitoringEnabled(): Promise<ClusterEntity[]> {
+    return this.repository.createQueryBuilder("cluster")
+      .leftJoin("ssl_monitoring", "ssl", "ssl.cluster_id = cluster.cluster_id")
+      .where("cluster.ssl_monitoring = TRUE")
+      .andWhere("cluster.is_active = TRUE")
+      .andWhere("(ssl.id IS NULL OR ssl.is_active = TRUE)")
+      .orderBy("cluster.clusterId", "ASC")
+      .getMany();
   }
 
   findById(clusterId: string): Promise<ClusterEntity | null> {

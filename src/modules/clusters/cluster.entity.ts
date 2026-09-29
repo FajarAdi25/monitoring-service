@@ -1,4 +1,4 @@
-// Version: 2.6.0
+// Version: 2.7.0
 import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from "typeorm";
 import type { Timestamp } from "../../common/types/timestamp";
 import { ClusterEnvironment } from "./cluster.enums";
@@ -28,6 +28,9 @@ export class ClusterEntity {
 
   @Column({ name: "ssl_monitoring", type: "boolean", default: false })
   sslMonitoring!: boolean;
+
+  @Column({ name: "is_active", type: "boolean", default: true })
+  isActive!: boolean;
 
   @CreateDateColumn({ name: "created_at", type: "timestamp", precision: 3 })
   createdAt!: Timestamp;

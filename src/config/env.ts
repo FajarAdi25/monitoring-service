@@ -1,4 +1,4 @@
-// Version: 2.6.0
+// Version: 2.7.0
 import "dotenv/config";
 
 function required(name: string, fallback?: string): string {
@@ -29,7 +29,7 @@ if (role !== "ADMIN" && role !== "VIEWER") {
   throw new Error("CURRENT_USER_ROLE must be ADMIN or VIEWER");
 }
 
-const appPort = Number(process.env.APP_PORT ?? 3000);
+const appPort = Number(process.env.APP_PORT ?? 3002);
 
 export const env = {
   appPort,
@@ -39,8 +39,7 @@ export const env = {
       process.env.ALERT_REMINDER_INTERVAL_MS ?? 60000,
     ),
     webhookUrl: optional("ALERT_WEBHOOK_URL"),
-    relayWebhookUrl: optional("RELAY_WEBHOOK_URL"),
-    relayWebhookApiKey: optional("RELAY_WEBHOOK_API_KEY"),
+    webhookToken: optional("ALERT_WEBHOOK_TOKEN"),
   },
   telegramBot: {
     basicAuthUsername: required("MONITORING_BASIC_AUTH_USERNAME"),
