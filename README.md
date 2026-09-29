@@ -1,4 +1,4 @@
-# Monitoring Service v2.7.1
+# Monitoring Service v2.7.2
 
 Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, and incident alerting.
 
@@ -171,7 +171,7 @@ Example (`NODE_DOWN`, INITIAL):
   "metric_source": "hashicorp",
   "collector": {
     "name": "hashicorp-metric-collector",
-    "version": "2.7.1",
+    "version": "2.7.2",
     "source_instance": "Cluster WEST",
     "runtime_host": "monitoring-service-host"
   },
@@ -273,6 +273,14 @@ Alerts are queued in `alert_deliveries` and sent by the alerting worker (every `
 
 Retries continue until the batch is `SENT` or `FAILED`, so a RESOLVED alert is not lost while REINTAKE is unavailable.
 
+A successful delivery (`202` or `200`) writes one log line:
+
+```text
+[ALERT:DELIVERY] batch=<batch_id> kind=<INITIAL|REMINDER|RESOLVED> incident=<incident_id> HTTP <status> sent (attempt <n>)
+```
+
+Check it with `docker logs -f monitoring-service | grep "ALERT:DELIVERY"`.
+
 ## Monitoring data
 
 ```text
@@ -368,7 +376,7 @@ Monitoring Service runs as a plain Docker container started with `docker run`. D
 Build the backend image:
 
 ```bash
-docker build -t monitoring-service:2.7.1 .
+docker build -t monitoring-service:2.7.2 .
 ```
 
 ### Local
@@ -383,7 +391,7 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   --env-file .env.docker.local \
   -p 127.0.0.1:3001:3002 \
-  monitoring-service:2.7.1
+  monitoring-service:2.7.2
 ```
 
 ### Dev
@@ -397,7 +405,7 @@ docker run -d \
   --init \
   --env-file .env.docker.dev \
   -p 3001:3002 \
-  monitoring-service:2.7.1
+  monitoring-service:2.7.2
 ```
 
 Check the backend logs:
@@ -413,13 +421,13 @@ The startup command runs pending TypeORM migrations against the configured Postg
 Save only the backend image:
 
 ```bash
-docker save -o monitoring-service-2.7.1.tar monitoring-service:2.7.1
+docker save -o monitoring-service-2.7.2.tar monitoring-service:2.7.2
 ```
 
-Copy `monitoring-service-2.7.1.tar` to the destination server, then load it:
+Copy `monitoring-service-2.7.2.tar` to the destination server, then load it:
 
 ```bash
-docker load -i monitoring-service-2.7.1.tar
+docker load -i monitoring-service-2.7.2.tar
 ```
 
 Run it on the destination server with the `docker run` command for that environment (see Local or Dev above).

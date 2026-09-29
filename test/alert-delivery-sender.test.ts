@@ -1,4 +1,4 @@
-// Version: 2.7.1
+// Version: 2.7.2
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AlertDeliveryEntity } from "../src/modules/alerting/alert-delivery.entity";
@@ -39,21 +39,27 @@ async function run(respond: () => Promise<AlertWebhookResponse>) {
     },
   };
 
+  const logs: string[] = [];
+  const originalLog = console.log;
   const originalWarn = console.warn;
   const originalError = console.error;
+  console.log = (message?: unknown) => {
+    logs.push(String(message));
+  };
   console.warn = () => {};
   console.error = () => {};
   try {
     await new AlertDeliverySender(repository, transport).processDue(NOW);
   } finally {
+    console.log = originalLog;
     console.warn = originalWarn;
     console.error = originalError;
   }
-  return { row, sentPayloads };
+  return { row, sentPayloads, logs };
 }
 
 test("202 marks the delivery SENT", async () => {
-  const { row, sentPayloads } = await run(async () => ({
+  const { row, sentPayloads, logs } = await run(async () => ({
     statusCode: 202,
     body: JSON.stringify({ accepted: 1, rejected: 0, duplicate: false, errors: [] }),
   }));
@@ -62,6 +68,14 @@ test("202 marks the delivery SENT", async () => {
   assert.equal(row.lastError, null);
   assert.equal(row.attemptCount, 1);
   assert.deepEqual(sentPayloads[0], { batch_id: "0191f4b1-2a3c-4d4e-8f50-112233445566" });
+  assert.deepEqual(logs, [
+    "[ALERT:DELIVERY] batch=0191f4b1-2a3c-4d4e-8f50-112233445566 kind=RESOLVED incident=10 HTTP 202 sent (attempt 1)",
+  ]);
+});
+
+test("failed delivery does not write a sent log", async () => {
+  const { logs } = await run(async () => ({ statusCode: 500, body: "boom" }));
+  assert.deepEqual(logs, []);
 });
 
 test("202 with rejected records is SENT and keeps the errors", async () => {

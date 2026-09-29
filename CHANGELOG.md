@@ -1,3 +1,9 @@
+## v2.7.2 - REINTAKE Delivery Success Log
+
+- Added a log line when REINTAKE accepts an alert batch (HTTP 202 or 200 duplicate): `[ALERT:DELIVERY] batch=<batch_id> kind=<kind> incident=<incident_id> HTTP <status> sent (attempt <n>)`.
+- Updated backend image version to `monitoring-service:2.7.2`.
+- No payload, retry, database, API, or alerting behavior changes.
+
 ## v2.7.1 - REINTAKE Alert Contract v1.0 Compliance
 
 - `entity.type` now uses contract enum values: NODE / DRIVER = `nomad_node`, ALLOCATION / EVALUATION = `other`, SSL = `cluster`.

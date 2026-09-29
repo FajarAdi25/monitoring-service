@@ -1,4 +1,4 @@
-// Version: 2.7.1
+// Version: 2.7.2
 import type { AlertDeliveryEntity } from "./alert-delivery.entity";
 import type { AlertDeliveryRepositoryPort } from "./alert-delivery.repository";
 import type { AlertWebhookResponse, AlertWebhookTransport } from "./alerting.notifier";
@@ -66,6 +66,9 @@ export class AlertDeliverySender {
       delivery.status = "SENT";
       delivery.sentAt = now;
       delivery.lastError = this.rejectedRecords(body);
+      console.log(
+        `[ALERT:DELIVERY] batch=${delivery.batchId} kind=${delivery.kind} incident=${delivery.incidentId} HTTP ${statusCode} sent (attempt ${delivery.attemptCount})`,
+      );
       if (delivery.lastError) {
         console.warn(
           `[ALERT:DELIVERY] batch=${delivery.batchId} kind=${delivery.kind} record rejected: ${delivery.lastError}`,
