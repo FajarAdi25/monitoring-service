@@ -1,4 +1,4 @@
-# Monitoring Service v2.7.2
+# Monitoring Service v2.9.1
 
 Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, and incident alerting.
 
@@ -6,7 +6,7 @@ Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemet
 
 ```text
 Nomad Pull
-  every 15 seconds
+  every 60 seconds
   active clusters only (clusters.is_active = true)
   noOverlap = true
   worker running guard = true
@@ -15,8 +15,7 @@ Failure
   -> OPEN
   -> INITIAL alert (status "firing") immediately
   -> REMINDER alert (status "firing"):
-       CRITICAL every 1 minute
-       MAJOR / WARNING every 5 minutes
+       every 5 minutes (all severities)
        SSL_CERTIFICATE_EXPIRING every 24 hours
 
 Recovery detected by monitoring engine
@@ -25,6 +24,10 @@ Recovery detected by monitoring engine
   -> next_notification_at = NULL
   -> OPEN reminders stop
 ```
+
+ALLOCATION_FAILED is one incident per Nomad job (`resource_key` = `<namespace>:<job id>`), opened when at least 1 allocation slot of the job is failed. Slots are allocation indexes (`[0]`, `[1]`, ...) for service and batch jobs, and nodes for system and sysbatch jobs (Nomad job `Type`; all their allocations are named `[0]`). Each slot counts once: `running` when it has a running allocation, `failed` when its latest failed allocation is not replaced by a running one. Job status is `FAILED` (MAJOR) when no slot is running and `DEGRADED` (WARNING) when some slots are still running; the incident severity follows the current status.
+
+ALLOCATION_FAILED is resolved when the job has no failed slot anymore, when the job is stopped (`Stop = true`) or no longer registered (purged), or when its slots no longer exist in Nomad (garbage collected; the slot current state becomes `NOT_FOUND`). Open per-slot ALLOCATION_FAILED incidents created before v2.9.0 are resolved on the first pull.
 
 There is no `CLOSED` status, no Close Case API, and no ACK/POSTPONE action in the current lifecycle.
 
@@ -65,7 +68,7 @@ ALERT_WEBHOOK_URL=http://10.59.179.182:8080/api/v1/webhook/alerts
 ALERT_WEBHOOK_TOKEN=CHANGE_ME
 
 NOMAD_ENABLED=true
-NOMAD_PULL_CRON="*/15 * * * * *"
+NOMAD_PULL_CRON="*/60 * * * * *"
 NOMAD_PULL_CRON_TZ=Asia/Jakarta
 NOMAD_PULL_RUN_ON_START=true
 
@@ -77,7 +80,7 @@ MONITORING_BASIC_AUTH_PASSWORD=replace-with-a-strong-random-password
 
 All API routes except `GET /api/v1/dashboard/health` require `Authorization: Basic base64(<MONITORING_BASIC_AUTH_USERNAME>:<MONITORING_BASIC_AUTH_PASSWORD>)`. Use HTTPS in production because Basic Auth is Base64 encoding, not encryption.
 
-`NOMAD_PULL_CRON="*/15 * * * * *"` means one pull every 15 seconds. `NomadPullWorker` keeps both `noOverlap: true` and its own `running` guard.
+`NOMAD_PULL_CRON="*/60 * * * * *"` (default) means one pull every 60 seconds. `NomadPullWorker` keeps both `noOverlap: true` and its own `running` guard.
 
 ## SSL certificate expiry monitoring
 
@@ -171,7 +174,7 @@ Example (`NODE_DOWN`, INITIAL):
   "metric_source": "hashicorp",
   "collector": {
     "name": "hashicorp-metric-collector",
-    "version": "2.7.2",
+    "version": "2.9.1",
     "source_instance": "Cluster WEST",
     "runtime_host": "monitoring-service-host"
   },
@@ -187,7 +190,7 @@ Example (`NODE_DOWN`, INITIAL):
       "status": "firing",
       "severity": "critical",
       "category": "platform",
-      "title": "NODE_DOWN - nomadclientwest2",
+      "title": "[cawang/Cluster WEST] NODE_DOWN - nomadclientwest2",
       "description": "Nomad node nomadclientwest2 is down.",
       "started_at_ms": 1789999990000,
       "updated_at_ms": 1790000000000,
@@ -233,7 +236,7 @@ Field mapping:
 | `status` | INITIAL / REMINDER = `firing`, RESOLVED = `resolved` |
 | `severity` | `critical`, `major`, or `warning` |
 | `category` | `platform` |
-| `title` | `<incident type> - <resource name>` (max 512 chars) |
+| `title` | `[<site>/<cluster name>] <incident type> - <resource name>`; ALLOCATION_FAILED: `[<site>/<cluster name>] ALLOCATION_FAILED - job <failed\|degraded> - alloc fail <failed> of <total> - <latest failed allocation name> on <node name>` (max 512 chars) |
 | `description` | Incident message (max 4,096 chars) |
 | `started_at_ms` | `opened_at` in epoch ms |
 | `updated_at_ms` | firing: `last_detected_at`; resolved: `resolved_at` (always newer than the last firing record) |
@@ -253,7 +256,7 @@ Field mapping:
 |---|---|
 | NODE | `node_id`, `status`, `status_description` |
 | DRIVER | `node_id`, `node_name`, `driver`, `health_description` |
-| ALLOCATION | `namespace`, `job_id`, `task_group`, `slot`, `allocation_id`, `node_name`, `client_status`, `client_description` |
+| ALLOCATION | `namespace`, `job_id`, `job_status`, `failed_allocations`, `running_allocations`, `total_allocations`, `task_group`, `slot`, `allocation_id`, `node_name`, `client_status`, `client_description` |
 | EVALUATION | `evaluation_id`, `job_id`, `namespace`, `status`, `status_description` |
 | SSL | `endpoint`, `valid_from`, `expires_at`, `days_remaining`, `subject_cn`, `issuer_cn`, `certificate_fingerprint256` |
 
@@ -351,15 +354,63 @@ GET /api/v1/dashboard/incidents/resolved
 `/dashboard/overview` and `/dashboard/health` read from `monitoring_current_states`.
 The incident dashboard uses the current lifecycle only: `OPEN -> RESOLVED`. `/dashboard/incidents/summary` returns `open.total`, `resolved.today`, `resolved.last24Hours`, `bySeverity`, and `byType`.
 
+## Grafana dashboard
+
+`grafana/alert-monitoring-dashboard.json` is a Grafana dashboard ("Alert Monitoring", uid `alert-monitoring`) that reads the Monitoring Service PostgreSQL database directly. No service change or metrics endpoint is needed.
+
+Setup:
+
+1. Add a PostgreSQL datasource in Grafana pointing to the Monitoring Service database (`DB_HOST`, `DB_PORT`, `DB_NAME`). A read-only user is enough:
+
+   ```sql
+   CREATE USER grafana_reader WITH PASSWORD 'CHANGE_ME';
+   GRANT CONNECT ON DATABASE monitoring TO grafana_reader;
+   GRANT USAGE ON SCHEMA public TO grafana_reader;
+   GRANT SELECT ON clusters, incidents, resolution_time, monitoring_current_states, ssl_monitoring TO grafana_reader;
+   ```
+
+2. Grafana → Dashboards → New → Import → upload the JSON, then choose the PostgreSQL datasource in the `Datasource` variable.
+
+Filters: the time picker (date range) plus these variables (all multi-select, default All):
+
+| Variable | Values | Applies to |
+|---|---|---|
+| `Datasource` | PostgreSQL datasource | all panels |
+| `Site` | `clusters.site` | all panels |
+| `Cluster` | `clusters.cluster_name` (limited to the selected sites) | all panels |
+| `Node` | Nomad node names from `monitoring_current_states` (limited to the selected clusters) | incident panels, Nomad Nodes |
+| `Severity` | `CRITICAL`, `MAJOR`, `WARNING` | incident panels |
+| `Source` | `NOMAD`, `SSL` | incident panels |
+| `Status` | `OPEN`, `RESOLVED` | time-range incident panels: Opened, Resolved, MTTR, Trends, Top Noisy Resources |
+
+`Node` matches the node of NODE_DOWN (resource name), DRIVER_UNHEALTHY (`context_json.nodeName`), and ALLOCATION_FAILED (`context_json.currentAllocation.NodeName`) incidents. Selecting specific nodes hides EVALUATION_BLOCKED and SSL incidents, which have no node; `All` keeps them.
+
+| Row | Panels |
+|---|---|
+| Overview | Open incidents, open by severity, opened / resolved in range, MTTR (`resolution_time.duration_seconds`), open by type (NODE_DOWN, ALLOCATION_FAILED, EVALUATION_BLOCKED, DRIVER_UNHEALTHY, SSL_CERTIFICATE_EXPIRING), Nomad nodes total / active / inactive |
+| Trends | Incidents opened by severity, opened vs resolved |
+| Breakdown | Top 10 noisy resources |
+| Open Incidents | Table of all OPEN incidents (severity, cluster, resource, message, age, reminders, last notification) |
+| SSL Certificates | Active `ssl_monitoring` rows ordered by `expires_at`, `days_remaining` colored (≤0 red, 1–30 orange, >30 green) |
+
+Notes:
+
+- "Open" panels, "Nomad Nodes", and the SSL table show the current state and ignore the time range; all other panels use the dashboard time range.
+- "Nomad Nodes" counts `monitoring_current_states` rows with `source = 'NOMAD'` and `resource_type = 'NODE'`: Active = state `READY`, Inactive = any other state (`DOWN`, `INITIALIZING`, `DISCONNECTED`, ...), Total = Active + Inactive. Nodes of inactive clusters keep their last state; exclude them with the `Cluster` filter.
+- Tables have pagination enabled.
+- Timestamp columns are `TIMESTAMP` without time zone. The dashboard assumes they are stored in UTC (the Docker image runs in UTC); "Age" uses `NOW() AT TIME ZONE 'UTC'`.
+- The datasource variable uses plugin id `grafana-postgresql-datasource` (Grafana 10.3+). For older Grafana, change the `datasource` variable query and panel datasource `type` to `postgres`.
+
 ## Nomad severity mapping
 
 Severity untuk incident Nomad bersifat fixed pada release ini:
 
 ```text
 NODE_DOWN           -> CRITICAL
-ALLOCATION_FAILED   -> MAJOR
+ALLOCATION_FAILED   -> MAJOR   (job failed: no allocation running)
+                       WARNING (job degraded: some allocations still running)
 EVALUATION_BLOCKED  -> MAJOR
-DRIVER_UNHEALTHY    -> WARNING
+DRIVER_UNHEALTHY    -> CRITICAL
 ```
 
 Nilai severity tidak lagi diambil dari environment variable.
@@ -376,7 +427,7 @@ Monitoring Service runs as a plain Docker container started with `docker run`. D
 Build the backend image:
 
 ```bash
-docker build -t monitoring-service:2.7.2 .
+docker build -t monitoring-service:2.9.1 .
 ```
 
 ### Local
@@ -391,7 +442,7 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   --env-file .env.docker.local \
   -p 127.0.0.1:3001:3002 \
-  monitoring-service:2.7.2
+  monitoring-service:2.9.1
 ```
 
 ### Dev
@@ -405,7 +456,7 @@ docker run -d \
   --init \
   --env-file .env.docker.dev \
   -p 3001:3002 \
-  monitoring-service:2.7.2
+  monitoring-service:2.9.1
 ```
 
 Check the backend logs:
@@ -421,13 +472,13 @@ The startup command runs pending TypeORM migrations against the configured Postg
 Save only the backend image:
 
 ```bash
-docker save -o monitoring-service-2.7.2.tar monitoring-service:2.7.2
+docker save -o monitoring-service-2.9.1.tar monitoring-service:2.9.1
 ```
 
-Copy `monitoring-service-2.7.2.tar` to the destination server, then load it:
+Copy `monitoring-service-2.9.1.tar` to the destination server, then load it:
 
 ```bash
-docker load -i monitoring-service-2.7.2.tar
+docker load -i monitoring-service-2.9.1.tar
 ```
 
 Run it on the destination server with the `docker run` command for that environment (see Local or Dev above).

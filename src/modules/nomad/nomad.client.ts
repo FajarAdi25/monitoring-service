@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
 import { AppError } from "../../common/errors/app-error";
-import type { NomadAllocation, NomadEvaluation, NomadNode } from "./nomad.types";
+import type { NomadAllocation, NomadEvaluation, NomadJob, NomadNode } from "./nomad.types";
 
 export interface NomadClientConfig {
   baseUrl: string;
@@ -64,6 +64,12 @@ export class NomadClient {
   getBlockedEvaluations(): Promise<NomadEvaluation[]> {
     return this.get<NomadEvaluation[]>("/v1/evaluations", {
       filter: 'Status=="blocked"'
+    });
+  }
+
+  getJobs(): Promise<NomadJob[]> {
+    return this.get<NomadJob[]>("/v1/jobs", {
+      namespace: "*"
     });
   }
 

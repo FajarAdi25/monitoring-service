@@ -47,7 +47,7 @@ export const env = {
   },
   nomad: {
     enabled: boolean("NOMAD_ENABLED", true),
-    pullCron: required("NOMAD_PULL_CRON", "*/15 * * * * *"),
+    pullCron: required("NOMAD_PULL_CRON", "*/60 * * * * *"),
     pullCronTimezone: required("NOMAD_PULL_CRON_TZ", "Asia/Jakarta"),
     pullRunOnStart: boolean("NOMAD_PULL_RUN_ON_START", true),
     requestTimeoutMs: Number(process.env.NOMAD_REQUEST_TIMEOUT_MS ?? 10000),

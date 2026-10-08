@@ -4,7 +4,10 @@ import type { ClusterEntity } from "../clusters/cluster.entity";
 import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { serializeClusterId, toClusterMetadata } from "../clusters/cluster.types";
 import { MonitoringObservationService } from "../monitoring/monitoring-observation.service";
-import { getNomadAllocationLogicalIdentity } from "./nomad-allocation-key";
+import {
+  getNomadAllocationLogicalIdentity,
+  type NomadAllocationLogicalIdentity
+} from "./nomad-allocation-key";
 import { createNomadFingerprint } from "./nomad.fingerprint";
 import { NOMAD_INCIDENT_SEVERITY } from "./nomad.severity";
 import type {
@@ -13,11 +16,21 @@ import type {
   NomadClusterApiMetadata,
   NomadClusterItem,
   NomadEvaluation,
+  NomadJob,
   NomadNode,
   NomadPullOutcome,
   NomadPullResult,
   ScopedNomadPullResult
 } from "./nomad.types";
+
+interface AllocationSlotResult {
+  identity: NomadAllocationLogicalIdentity;
+  state: string;
+  /** Most recent failed allocation when the slot counts as failed, otherwise null. */
+  failedAllocation: NomadAllocation | null;
+  payload: Record<string, unknown>;
+  snapshotChanged: boolean;
+}
 
 export class NomadService {
   private pulling = false;
@@ -175,11 +188,12 @@ export class NomadService {
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
 
-    const [nodes, allocations, failedAllocations, blockedEvaluations] = await Promise.all([
+    const [nodes, allocations, failedAllocations, blockedEvaluations, jobs] = await Promise.all([
       client.getNodes(),
       client.getAllocations(),
       client.getFailedAllocations(),
-      client.getBlockedEvaluations()
+      client.getBlockedEvaluations(),
+      client.getJobs()
     ]);
 
     for (const node of nodes) {
@@ -193,6 +207,7 @@ export class NomadService {
       cluster.clusterId,
       allocations,
       failedAllocations,
+      jobs,
       now
     );
     snapshotChanges += allocationResult.snapshotChanges;
@@ -329,66 +344,193 @@ export class NomadService {
     clusterId: string,
     allocations: NomadAllocation[],
     failedAllocations: NomadAllocation[],
+    jobs: NomadJob[],
     observedAt: Date
   ) {
     let snapshotChanges = 0;
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
 
+    // Jobs that are stopped or no longer registered (purged) do not need an
+    // ALLOCATION_FAILED alert anymore.
+    const runningJobKeys = new Set(
+      jobs
+        .filter(job => job.Stop !== true)
+        .map(job => this.jobKey(job.Namespace, job.ID))
+    );
+
+    // System and sysbatch jobs have one allocation per node, all named [0].
+    const perNodeJobKeys = new Set(
+      jobs
+        .filter(job => ["SYSTEM", "SYSBATCH"].includes(String(job.Type ?? "").toUpperCase()))
+        .map(job => this.jobKey(job.Namespace, job.ID))
+    );
+    const identityOf = (allocation: NomadAllocation) => getNomadAllocationLogicalIdentity(allocation, {
+      perNode: perNodeJobKeys.has(this.jobKey(allocation.Namespace, String(allocation.JobID ?? "")))
+    });
+
     const groups = new Map<string, NomadAllocation[]>();
     const failedGroups = new Map<string, NomadAllocation[]>();
 
     for (const allocation of allocations) {
-      const identity = getNomadAllocationLogicalIdentity(allocation);
+      const identity = identityOf(allocation);
       const group = groups.get(identity.resourceKey) ?? [];
       group.push(allocation);
       groups.set(identity.resourceKey, group);
     }
 
     for (const allocation of failedAllocations) {
-      const identity = getNomadAllocationLogicalIdentity(allocation);
+      const identity = identityOf(allocation);
       const group = failedGroups.get(identity.resourceKey) ?? [];
       group.push(allocation);
       failedGroups.set(identity.resourceKey, group);
     }
 
+    // Slot states per job: ALLOCATION_FAILED is raised once per Nomad job.
+    const jobSlots = new Map<string, { jobId: string; slots: AllocationSlotResult[] }>();
+
     for (const [resourceKey, group] of groups.entries()) {
-      const result = await this.processAllocationGroup(
+      const slot = await this.processAllocationSlot(
         clusterId,
         group,
         failedGroups.get(resourceKey) ?? [],
+        identityOf,
+        runningJobKeys,
         observedAt
       );
-      snapshotChanges += result.snapshotChanges;
-      failuresProcessed += result.failuresProcessed;
-      recoveriesProcessed += result.recoveriesProcessed;
+      if (slot.snapshotChanged) snapshotChanges += 1;
+
+      const { namespace, jobId } = slot.identity;
+      if (jobId === null) continue;
+      const key = this.jobKey(namespace, jobId);
+      const entry = jobSlots.get(key) ?? { jobId, slots: [] };
+      entry.slots.push(slot);
+      jobSlots.set(key, entry);
+    }
+
+    const failingFingerprints = new Set<string>();
+
+    for (const [jobKey, { jobId, slots }] of jobSlots.entries()) {
+      const failedSlots = slots.filter(slot => slot.failedAllocation !== null);
+      if (failedSlots.length === 0) continue;
+
+      const running = slots.filter(slot => slot.state === "RUNNING").length;
+      const total = slots.length;
+      const status = running > 0 ? "DEGRADED" : "FAILED";
+      const latest = [...failedSlots].sort((left, right) =>
+        this.allocationOrder(right.failedAllocation!) - this.allocationOrder(left.failedAllocation!)
+      )[0];
+      const latestDescription = latest.failedAllocation!.ClientDescription;
+
+      const fingerprint = createNomadFingerprint({
+        clusterId: clusterId,
+        type: "ALLOCATION_FAILED",
+        resourceType: "ALLOCATION",
+        resourceKey: jobKey
+      });
+      failingFingerprints.add(fingerprint);
+
+      await this.alerting.processFailure({
+        clusterId: clusterId,
+        source: "NOMAD",
+        type: "ALLOCATION_FAILED",
+        severity: status === "FAILED"
+          ? NOMAD_INCIDENT_SEVERITY.ALLOCATION_JOB_FAILED
+          : NOMAD_INCIDENT_SEVERITY.ALLOCATION_JOB_DEGRADED,
+        resourceType: "ALLOCATION",
+        resourceKey: jobKey,
+        resourceName: jobId,
+        fingerprint,
+        message: `Nomad job ${jobId} ${status.toLowerCase()}: ${failedSlots.length} of ${total} allocations failed.`
+          + (latestDescription ? ` Latest: ${latestDescription}` : ""),
+        context: {
+          ...latest.payload,
+          jobSummary: {
+            status,
+            failed: failedSlots.length,
+            running,
+            total
+          }
+        },
+        detectedAt: observedAt
+      });
+      failuresProcessed += 1;
+    }
+
+    // Any other open ALLOCATION_FAILED incident of this cluster is resolved:
+    // its job has no failed allocation anymore, is stopped or purged, or it is
+    // a per-slot incident from before alerts were grouped per job.
+    const openIncidents = await this.alerting.findOpenIncidents(clusterId, "ALLOCATION_FAILED");
+    for (const incident of openIncidents) {
+      if (!incident.activeFingerprint || failingFingerprints.has(incident.activeFingerprint)) continue;
+      const resolved = await this.alerting.processRecovery({
+        fingerprint: incident.activeFingerprint,
+        detectedAt: observedAt
+      });
+      if (resolved) recoveriesProcessed += 1;
+    }
+
+    // Allocation slots that disappeared from Nomad (garbage collected, job
+    // purged, or count scaled down) are marked NOT_FOUND in the current state.
+    const latestStates = await this.monitoring.latestStates({
+      clusterId: clusterId,
+      source: "NOMAD",
+      resourceType: "ALLOCATION"
+    });
+
+    for (const latest of latestStates) {
+      if (latest.state !== "FAILED" || groups.has(latest.resourceKey)) continue;
+
+      const recoverySnapshot = await this.monitoring.record({
+        clusterId: clusterId,
+        source: "NOMAD",
+        resourceType: "ALLOCATION",
+        resourceKey: latest.resourceKey,
+        state: "NOT_FOUND",
+        payload: null,
+        observedAt
+      });
+      if (recoverySnapshot.changed) snapshotChanges += 1;
     }
 
     return { snapshotChanges, failuresProcessed, recoveriesProcessed };
   }
 
-  private async processAllocationGroup(
+  private jobKey(namespace: string | null | undefined, jobId: string): string {
+    return `${namespace || "default"}:${jobId}`;
+  }
+
+  /** Records the current state of one logical allocation slot. */
+  private async processAllocationSlot(
     clusterId: string,
     allocations: NomadAllocation[],
     failedAllocations: NomadAllocation[],
+    identityOf: (allocation: NomadAllocation) => NomadAllocationLogicalIdentity,
+    runningJobKeys: Set<string>,
     observedAt: Date
-  ) {
+  ): Promise<AllocationSlotResult> {
     const representative = this.selectAllocationRepresentative(allocations);
-    const identity = getNomadAllocationLogicalIdentity(representative);
+    const identity = identityOf(representative);
     const runningAllocation = this.selectMostRecentAllocation(
       allocations.filter(allocation => this.allocationState(allocation) === "RUNNING")
     );
-    const failedAllocation = this.selectMostRecentAllocation(
-      failedAllocations.filter(allocation =>
-        String(allocation.DesiredStatus ?? "").toUpperCase() !== "STOP"
-      )
-    );
+    // Nomad does not set DesiredStatus=stop on allocations that were already
+    // failed when the job is stopped, so the job state is checked as well.
+    const jobStopped = identity.jobId !== null
+      && !runningJobKeys.has(this.jobKey(identity.namespace, identity.jobId));
+    const failedAllocation = jobStopped || runningAllocation
+      ? null
+      : this.selectMostRecentAllocation(
+        failedAllocations.filter(allocation =>
+          String(allocation.DesiredStatus ?? "").toUpperCase() !== "STOP"
+        )
+      );
 
     // A logical allocation slot is considered recovered when Nomad has a
     // running allocation for that slot, even if an older allocation ID remains
     // permanently FAILED in Nomad history.
     const effectiveAllocation = runningAllocation ?? failedAllocation ?? representative;
-    const effectiveState = runningAllocation
+    const state = runningAllocation
       ? "RUNNING"
       : failedAllocation
         ? "FAILED"
@@ -412,86 +554,17 @@ export class NomadService {
       resourceType: "ALLOCATION",
       resourceKey: identity.resourceKey,
       resourceName: identity.resourceName,
-      state: effectiveState,
+      state,
       payload,
       observedAt
     });
 
-    const fingerprint = createNomadFingerprint({
-      clusterId: clusterId,
-      type: "ALLOCATION_FAILED",
-      resourceType: "ALLOCATION",
-      resourceKey: identity.resourceKey
-    });
-
-    const legacyFingerprints = allocations.map(allocation => createNomadFingerprint({
-      clusterId: clusterId,
-      type: "ALLOCATION_FAILED",
-      resourceType: "ALLOCATION",
-      resourceKey: allocation.ID
-    }));
-
-    if (runningAllocation) {
-      const recoveredIncidentIds = new Set<string>();
-      const resolvedCurrent = await this.alerting.processRecovery({ fingerprint, detectedAt: observedAt });
-      if (resolvedCurrent) recoveredIncidentIds.add(resolvedCurrent.publicId);
-
-      for (const legacyFingerprint of legacyFingerprints) {
-        const resolvedLegacy = await this.alerting.processRecovery({
-          fingerprint: legacyFingerprint,
-          detectedAt: observedAt
-        });
-        if (resolvedLegacy) recoveredIncidentIds.add(resolvedLegacy.publicId);
-      }
-
-      return {
-        snapshotChanges: snapshot.changed ? 1 : 0,
-        failuresProcessed: 0,
-        recoveriesProcessed: recoveredIncidentIds.size
-      };
-    }
-
-    if (failedAllocation) {
-      await this.alerting.processFailure({
-        clusterId: clusterId,
-        source: "NOMAD",
-        type: "ALLOCATION_FAILED",
-        severity: NOMAD_INCIDENT_SEVERITY.ALLOCATION_FAILED,
-        resourceType: "ALLOCATION",
-        resourceKey: identity.resourceKey,
-        resourceName: identity.resourceName,
-        fingerprint,
-        message: failedAllocation.ClientDescription || `Nomad allocation ${identity.resourceName} failed.`,
-        context: payload,
-        detectedAt: observedAt
-      }, { legacyFingerprints });
-
-      return {
-        snapshotChanges: snapshot.changed ? 1 : 0,
-        failuresProcessed: 1,
-        recoveriesProcessed: 0
-      };
-    }
-
-    const recoveredIncidentIds = new Set<string>();
-    const resolvedCurrent = await this.alerting.processRecovery({
-      fingerprint,
-      detectedAt: observedAt
-    });
-    if (resolvedCurrent) recoveredIncidentIds.add(resolvedCurrent.publicId);
-
-    for (const legacyFingerprint of legacyFingerprints) {
-      const resolvedLegacy = await this.alerting.processRecovery({
-        fingerprint: legacyFingerprint,
-        detectedAt: observedAt
-      });
-      if (resolvedLegacy) recoveredIncidentIds.add(resolvedLegacy.publicId);
-    }
-
     return {
-      snapshotChanges: snapshot.changed ? 1 : 0,
-      failuresProcessed: 0,
-      recoveriesProcessed: recoveredIncidentIds.size
+      identity,
+      state,
+      failedAllocation,
+      payload,
+      snapshotChanged: snapshot.changed
     };
   }
 

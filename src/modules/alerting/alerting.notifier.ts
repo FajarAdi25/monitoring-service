@@ -1,4 +1,4 @@
-// Version: 2.7.1
+// Version: 2.9.0
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
@@ -106,6 +106,34 @@ function entityIp(incident: IncidentEntity): string | null {
   return null;
 }
 
+/**
+ * `[<site>/<cluster>] <type> - <resource name>`.
+ * ALLOCATION: `[<site>/<cluster>] ALLOCATION_FAILED - job <failed|degraded> - alloc fail <x> of <y> - <allocation> on <node>`.
+ */
+function alertTitle(incident: IncidentEntity, cluster: ClusterMetadata): string {
+  const prefix = `[${cluster.site}/${cluster.clusterName}] ${incident.type}`;
+  if (incident.resourceType !== "ALLOCATION") {
+    return `${prefix} - ${incident.resourceName ?? incident.resourceKey}`;
+  }
+
+  const context = asRecord(incident.contextJson);
+  const current = asRecord(context.currentAllocation);
+  const summary = asRecord(context.jobSummary);
+  const nodeName = contextString(current, "NodeName");
+  const status = contextString(summary, "status");
+
+  let title = prefix;
+  if (status) {
+    title += ` - job ${status.toLowerCase()} - alloc fail ${summary.failed} of ${summary.total}`;
+    title += ` - ${contextString(current, "Name") ?? incident.resourceName ?? incident.resourceKey}`;
+  } else {
+    // Per-slot incidents created before alerts were grouped per job.
+    title += ` - ${incident.resourceName ?? incident.resourceKey}`;
+  }
+  if (nodeName) title += ` on ${nodeName}`;
+  return title;
+}
+
 function contextEntries(incident: IncidentEntity): Array<[string, unknown]> {
   const context = asRecord(incident.contextJson);
   switch (incident.resourceType) {
@@ -125,9 +153,14 @@ function contextEntries(incident: IncidentEntity): Array<[string, unknown]> {
     case "ALLOCATION": {
       const logical = asRecord(context.logicalAllocation);
       const current = asRecord(context.currentAllocation);
+      const summary = asRecord(context.jobSummary);
       return [
         ["namespace", logical.namespace],
         ["job_id", logical.jobId],
+        ["job_status", summary.status],
+        ["failed_allocations", summary.failed],
+        ["running_allocations", summary.running],
+        ["total_allocations", summary.total],
         ["task_group", logical.taskGroup],
         ["slot", logical.slot],
         ["allocation_id", current.ID],
@@ -213,10 +246,7 @@ export function buildAlertWebhookPayload(
         status: resolved ? "resolved" : "firing",
         severity: incident.severity.toLowerCase(),
         category: "platform",
-        title: truncate(
-          `${incident.type} - ${incident.resourceName ?? incident.resourceKey}`,
-          LIMIT.title,
-        ),
+        title: truncate(alertTitle(incident, cluster), LIMIT.title),
         description: truncate(incident.message, LIMIT.description),
         started_at_ms: startedAtMs,
         // RESOLVED must carry a newer updated_at_ms than the last firing record.

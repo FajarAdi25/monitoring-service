@@ -1,3 +1,72 @@
+## v2.9.1 - ALLOCATION_FAILED Slots per Node for System Jobs
+
+- Fixed ALLOCATION_FAILED counting for Nomad `system` and `sysbatch` jobs: all their allocations are named `[0]`, so every node was merged into one slot (e.g. `alloc fail 1 of 1`) and a running allocation on one node hid a failed allocation on another node.
+- For `system` / `sysbatch` jobs (Nomad job `Type` from `GET /v1/jobs`), the allocation slot is now per node: `<namespace>:<job>:<task group>:<node id>`. Service and batch jobs keep the allocation index.
+- Old `...:0` slot rows of system jobs in `monitoring_current_states` are no longer updated; a `FAILED` one becomes `NOT_FOUND`.
+- Updated backend image version to `monitoring-service:2.9.1`.
+- No payload format, title format, severity, reminder, database schema, or API changes.
+
+## v2.9.0 - ALLOCATION_FAILED per Job, Reminder and Severity Changes
+
+- Nomad pull default changed to every 60 seconds: `NOMAD_PULL_CRON="*/60 * * * * *"` (code default, `.env*` files, README).
+- REMINDER alerts to REINTAKE are sent every 5 minutes for all severities (CRITICAL was every 1 minute). SSL_CERTIFICATE_EXPIRING stays every 24 hours.
+- ALLOCATION_FAILED is now one incident per Nomad job (`resource_key` = `<namespace>:<job id>`, `resource_name` = job id), opened when at least 1 allocation slot of the job is failed.
+- Job status: `FAILED` when no slot of the job is running (severity MAJOR), `DEGRADED` when some slots are still running (severity WARNING). The open incident follows the current status.
+- ALLOCATION_FAILED title: `[<site>/<cluster>] ALLOCATION_FAILED - job <failed|degraded> - alloc fail <failed> of <total> - <latest failed allocation name> on <node name>`.
+- ALLOCATION_FAILED context adds `job_status`, `failed_allocations`, `running_allocations`, `total_allocations`; `context_json.jobSummary` stores them.
+- ALLOCATION_FAILED incidents are resolved when the job has no failed slot, is stopped, or is purged. Open per-slot ALLOCATION_FAILED incidents from earlier versions are resolved (RESOLVED sent) on the first pull after upgrade.
+- DRIVER_UNHEALTHY severity changed from WARNING to CRITICAL.
+- Updated backend image version to `monitoring-service:2.9.0`.
+- No database schema, API, retry, or SSL monitoring changes.
+
+## v2.8.4 - Resolve ALLOCATION_FAILED When Job Is Stopped
+
+- Fixed ALLOCATION_FAILED incidents staying `OPEN` (with reminders) after the Nomad job was stopped. Nomad keeps `DesiredStatus=run` on allocations that already failed, so the pull now also reads `GET /v1/jobs?namespace=*`.
+- ALLOCATION_FAILED is resolved (RESOLVED alert sent to REINTAKE) when the job is stopped (`Stop = true`) or no longer registered (purged).
+- ALLOCATION_FAILED is resolved when the allocation slot no longer exists in Nomad (garbage collected or count scaled down); its current state becomes `NOT_FOUND`.
+- A failed allocation of a job that is still running stays `OPEN` (unchanged).
+- The Nomad token needs permission to list jobs (`list-jobs`, included in the namespace `read` policy).
+- Added `test/nomad-allocation-job-stopped.test.ts`.
+- Updated backend image version to `monitoring-service:2.8.4`.
+- No payload, retry, database, API, or reminder interval changes.
+
+## v2.8.3 - Alert Title with Site, Cluster, and Allocation Node
+
+- Alert `title` now starts with `[<site>/<cluster name>]` for all incident types, e.g. `[cawang/Cluster WEST] NODE_DOWN - nomadclientwest2`.
+- ALLOCATION_FAILED `title` adds ` on <node name>` (Nomad `NodeName` of the allocation) when available, e.g. `[cawang/Cluster WEST] ALLOCATION_FAILED - web.app[0] on nomadclientwest2`.
+- README payload example and field mapping updated.
+- Updated backend image version to `monitoring-service:2.8.3`.
+- No fingerprint, alert_id, entity, context, retry, database, API, or incident lifecycle changes.
+
+## v2.8.2 - Grafana Dashboard Layout Update
+
+- Removed panels: Oldest Open, Incidents by Type and Incidents by Cluster (Breakdown), and the whole REINTAKE Delivery row.
+- Added Overview panel "Open by Type": OPEN incidents per type (NODE_DOWN, ALLOCATION_FAILED, EVALUATION_BLOCKED, DRIVER_UNHEALTHY, SSL_CERTIFICATE_EXPIRING).
+- Added Overview panel "Nomad Nodes": total, active (`READY`), and inactive (any other state) nodes from `monitoring_current_states`, filtered by site, cluster, and node.
+- Enabled pagination on all tables (Top Noisy Resources, Open Incidents, SSL Certificate Expiry).
+- Fixed the dashboard description text encoding.
+- README: read-only Grafana user now gets `SELECT` on `monitoring_current_states` (needed by the Node filter and Nomad Nodes panel) instead of `alert_deliveries`; panel and filter tables updated.
+- Updated backend image version to `monitoring-service:2.8.2`.
+- No service code, database, API, payload, or alerting behavior changes.
+
+## v2.8.1 - Grafana Dashboard Filters
+
+- Added `Node`, `Source`, and `Status` filters to `grafana/alert-monitoring-dashboard.json`.
+- `Node` lists Nomad node names from `monitoring_current_states` for the selected clusters and matches NODE_DOWN, DRIVER_UNHEALTHY, and ALLOCATION_FAILED incidents. `All` also keeps incidents without a node (EVALUATION_BLOCKED, SSL).
+- `Source` (`NOMAD`, `SSL`) applies to incident and delivery panels. `Status` (`OPEN`, `RESOLVED`) applies to the time-range incident panels (Opened, Resolved, MTTR, Trends, Breakdown).
+- README "Grafana dashboard" section lists each filter and the panels it applies to.
+- Updated backend image version to `monitoring-service:2.8.1`.
+- No service code, database, API, payload, or alerting behavior changes.
+
+## v2.8.0 - Grafana Alert Monitoring Dashboard
+
+- Added `grafana/alert-monitoring-dashboard.json`: Grafana dashboard "Alert Monitoring" using a PostgreSQL datasource on the Monitoring Service database.
+- Panels: open incidents and severity, opened / resolved trends, MTTR, incidents by type / cluster, top noisy resources, open incident table, REINTAKE delivery (`alert_deliveries`) status / success rate / latency / pending + failed table, SSL certificate expiry.
+- Variables: datasource, site, cluster, severity.
+- Added "Grafana dashboard" section to README (datasource, read-only user, import steps).
+- Updated backend image version to `monitoring-service:2.8.0`.
+- No service code, database, API, payload, or alerting behavior changes.
+
 ## v2.7.2 - REINTAKE Delivery Success Log
 
 - Added a log line when REINTAKE accepts an alert batch (HTTP 202 or 200 duplicate): `[ALERT:DELIVERY] batch=<batch_id> kind=<kind> incident=<incident_id> HTTP <status> sent (attempt <n>)`.

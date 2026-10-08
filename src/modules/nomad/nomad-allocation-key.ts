@@ -15,15 +15,31 @@ export interface NomadAllocationLogicalIdentity {
  *
  * For standard service allocations Nomad keeps the allocation name stable,
  * e.g. front-end-sample.app-group[0]. The trailing index is the logical slot.
+ *
+ * System and sysbatch jobs run one allocation per node and all of them use
+ * index [0], so `perNode` makes the node ID part of the identity instead.
  */
 export function getNomadAllocationLogicalIdentity(
-  allocation: NomadAllocation
+  allocation: NomadAllocation,
+  options: { perNode?: boolean } = {}
 ): NomadAllocationLogicalIdentity {
   const namespace = normalizePart(allocation.Namespace) ?? "default";
   const jobId = normalizePart(allocation.JobID);
   const taskGroup = normalizePart(allocation.TaskGroup);
   const name = normalizePart(allocation.Name);
   const slot = extractAllocationSlot(name);
+  const nodeId = normalizePart(allocation.NodeID);
+
+  if (options.perNode && jobId && taskGroup && nodeId) {
+    return {
+      resourceKey: `${namespace}:${jobId}:${taskGroup}:${nodeId}`,
+      resourceName: name ?? `${jobId}.${taskGroup}`,
+      namespace,
+      jobId,
+      taskGroup,
+      slot
+    };
+  }
 
   if (jobId && taskGroup && slot !== null) {
     return {

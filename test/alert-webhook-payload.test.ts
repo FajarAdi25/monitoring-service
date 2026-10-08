@@ -1,4 +1,4 @@
-// Version: 2.7.1
+// Version: 2.9.0
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAlertWebhookPayload } from "../src/modules/alerting/alerting.notifier";
@@ -96,6 +96,7 @@ test("NODE_DOWN INITIAL matches the REINTAKE alert contract", () => {
     source_id: "9d2e7c1a-4b3f-4e8a-9c1d-2e3f4a5b6c7d",
     ip: "10.30.0.22",
   });
+  assert.equal(alert.title, "[cawang/Cluster WEST] NODE_DOWN - NomadClientWest2.dc.local");
   assert.equal(alert.trigger, null);
   assert.deepEqual(alert.dimensions, {
     cluster: "Cluster WEST",
@@ -193,6 +194,54 @@ test("every resource type maps to a contract entity.type with string-only maps",
     assertStringMap(alert.dimensions);
     assertStringMap(alert.context);
   });
+
+  assert.equal(
+    buildAlertWebhookPayload({ kind: "INITIAL", incident: incident(cases[1]) }, cluster).alerts[0].title,
+    "[cawang/Cluster WEST] ALLOCATION_FAILED - web.app[0] on nomadclientwest2",
+  );
+
+  const job = {
+    type: "ALLOCATION_FAILED",
+    resourceType: "ALLOCATION",
+    resourceKey: "default:fmc-widget",
+    resourceName: "fmc-widget",
+  };
+  const jobContext = (status: string, failed: number, running: number) => ({
+    logicalAllocation: { namespace: "default", jobId: "fmc-widget", taskGroup: "fmc-widget", slot: "0" },
+    currentAllocation: {
+      ID: "alloc-2",
+      Name: "fmc-widget.fmc-widget[0]",
+      NodeName: "nomadegresstbspreapp1",
+      ClientStatus: "failed",
+    },
+    observedAllocationIds: ["alloc-2"],
+    jobSummary: { status, failed, running, total: 4 },
+  });
+
+  const degraded = buildAlertWebhookPayload(
+    { kind: "INITIAL", incident: incident({ ...job, severity: IncidentSeverity.WARNING, contextJson: jobContext("DEGRADED", 2, 2) }) },
+    cluster,
+  ).alerts[0];
+  assert.equal(
+    degraded.title,
+    "[cawang/Cluster WEST] ALLOCATION_FAILED - job degraded - alloc fail 2 of 4 - fmc-widget.fmc-widget[0] on nomadegresstbspreapp1",
+  );
+  assert.equal(degraded.severity, "warning");
+  assert.equal(degraded.context.job_status, "DEGRADED");
+  assert.equal(degraded.context.failed_allocations, "2");
+  assert.equal(degraded.context.running_allocations, "2");
+  assert.equal(degraded.context.total_allocations, "4");
+  assertStringMap(degraded.context);
+
+  const failed = buildAlertWebhookPayload(
+    { kind: "INITIAL", incident: incident({ ...job, severity: IncidentSeverity.MAJOR, contextJson: jobContext("FAILED", 4, 0) }) },
+    cluster,
+  ).alerts[0];
+  assert.equal(
+    failed.title,
+    "[cawang/Cluster WEST] ALLOCATION_FAILED - job failed - alloc fail 4 of 4 - fmc-widget.fmc-widget[0] on nomadegresstbspreapp1",
+  );
+  assert.equal(failed.severity, "major");
 
   const ssl = buildAlertWebhookPayload({ kind: "INITIAL", incident: incident(cases[3]) }, cluster).alerts[0];
   assert.deepEqual(ssl.context, {

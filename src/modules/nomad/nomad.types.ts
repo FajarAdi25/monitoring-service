@@ -48,6 +48,15 @@ export interface NomadEvaluation {
   [key: string]: unknown;
 }
 
+export interface NomadJob {
+  ID: string;
+  Namespace?: string;
+  Type?: string;
+  Status?: string;
+  Stop?: boolean;
+  [key: string]: unknown;
+}
+
 export interface NomadPullResult {
   startedAt: string;
   finishedAt: string;
@@ -67,6 +76,7 @@ export interface NomadClientPort {
   getAllocation(allocationId: string): Promise<NomadAllocation>;
   getJobSummary(jobId: string): Promise<Record<string, unknown>>;
   getBlockedEvaluations(): Promise<NomadEvaluation[]>;
+  getJobs(): Promise<NomadJob[]>;
 }
 
 export type NomadClientFactory = (cluster: ClusterEntity) => NomadClientPort;

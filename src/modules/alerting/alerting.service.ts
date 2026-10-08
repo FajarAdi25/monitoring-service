@@ -116,6 +116,10 @@ export class AlertingService {
     return incident;
   }
 
+  findOpenIncidents(clusterId: string, type: string): Promise<IncidentEntity[]> {
+    return this.incidentRepository.findOpenByClusterAndType(clusterId, type);
+  }
+
   private async findLegacyOpenIncident(
     fingerprints: string[],
     currentFingerprint: string

@@ -1,0 +1,1426 @@
+{
+  "title": "Alert Monitoring",
+  "uid": "alert-monitoring",
+  "description": "Monitoring Service v2.8.2 - incidents, Nomad nodes, SSL expiry (PostgreSQL).",
+  "tags": [
+    "monitoring-service",
+    "alerting"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "links": [],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource",
+        "refresh": 1,
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "current": {},
+        "options": [],
+        "regex": ""
+      },
+      {
+        "name": "site",
+        "label": "Site",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${datasource}"
+        },
+        "definition": "SELECT DISTINCT site FROM clusters ORDER BY site",
+        "query": "SELECT DISTINCT site FROM clusters ORDER BY site",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1,
+        "hide": 0,
+        "options": []
+      },
+      {
+        "name": "cluster",
+        "label": "Cluster",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${datasource}"
+        },
+        "definition": "SELECT cluster_name AS __text, cluster_id::text AS __value FROM clusters WHERE site IN ($site) ORDER BY cluster_name",
+        "query": "SELECT cluster_name AS __text, cluster_id::text AS __value FROM clusters WHERE site IN ($site) ORDER BY cluster_name",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1,
+        "hide": 0,
+        "options": []
+      },
+      {
+        "name": "node",
+        "label": "Node",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${datasource}"
+        },
+        "definition": "SELECT DISTINCT resource_name FROM monitoring_current_states WHERE source = 'NOMAD' AND resource_type = 'NODE' AND resource_name IS NOT NULL AND cluster_id::text IN ($cluster) ORDER BY resource_name",
+        "query": "SELECT DISTINCT resource_name FROM monitoring_current_states WHERE source = 'NOMAD' AND resource_type = 'NODE' AND resource_name IS NOT NULL AND cluster_id::text IN ($cluster) ORDER BY resource_name",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1,
+        "hide": 0,
+        "options": [],
+        "allValue": "'__all'"
+      },
+      {
+        "name": "severity",
+        "label": "Severity",
+        "type": "custom",
+        "query": "CRITICAL,MAJOR,WARNING",
+        "includeAll": true,
+        "multi": true,
+        "hide": 0,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "CRITICAL",
+            "value": "CRITICAL"
+          },
+          {
+            "selected": false,
+            "text": "MAJOR",
+            "value": "MAJOR"
+          },
+          {
+            "selected": false,
+            "text": "WARNING",
+            "value": "WARNING"
+          }
+        ]
+      },
+      {
+        "name": "source",
+        "label": "Source",
+        "type": "custom",
+        "query": "NOMAD,SSL",
+        "includeAll": true,
+        "multi": true,
+        "hide": 0,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "NOMAD",
+            "value": "NOMAD"
+          },
+          {
+            "selected": false,
+            "text": "SSL",
+            "value": "SSL"
+          }
+        ]
+      },
+      {
+        "name": "status",
+        "label": "Status",
+        "type": "custom",
+        "query": "OPEN,RESOLVED",
+        "includeAll": true,
+        "multi": true,
+        "hide": 0,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "OPEN",
+            "value": "OPEN"
+          },
+          {
+            "selected": false,
+            "text": "RESOLVED",
+            "value": "RESOLVED"
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Open Incidents",
+      "description": "Incident dengan status OPEN saat ini (tidak terpengaruh time range).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS \"Open\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE i.status = 'OPEN'\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Open by Severity",
+      "description": "Incident OPEN saat ini per severity.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  COUNT(*) FILTER (WHERE i.severity = 'CRITICAL') AS \"CRITICAL\",\n  COUNT(*) FILTER (WHERE i.severity = 'MAJOR') AS \"MAJOR\",\n  COUNT(*) FILTER (WHERE i.severity = 'WARNING') AS \"WARNING\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE i.status = 'OPEN'\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CRITICAL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MAJOR"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "WARNING"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Opened",
+      "description": "Incident baru (opened_at) dalam time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS \"Opened\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE $__timeFilter(i.opened_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Resolved",
+      "description": "Incident RESOLVED (resolved_at) dalam time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS \"Resolved\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE i.status = 'RESOLVED'\n  AND $__timeFilter(i.resolved_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "MTTR",
+      "description": "Rata-rata resolution_time.duration_seconds untuk incident yang resolved dalam time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT AVG(rt.duration_seconds) AS \"MTTR\"\nFROM resolution_time rt\nJOIN incidents i ON i.id = rt.incident_id\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE rt.resolved_at IS NOT NULL\n  AND $__timeFilter(rt.resolved_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "-",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Open by Type",
+      "description": "Incident OPEN saat ini per type.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 14,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  COUNT(*) FILTER (WHERE i.type = 'NODE_DOWN') AS \"NODE_DOWN\",\n  COUNT(*) FILTER (WHERE i.type = 'ALLOCATION_FAILED') AS \"ALLOCATION_FAILED\",\n  COUNT(*) FILTER (WHERE i.type = 'EVALUATION_BLOCKED') AS \"EVALUATION_BLOCKED\",\n  COUNT(*) FILTER (WHERE i.type = 'DRIVER_UNHEALTHY') AS \"DRIVER_UNHEALTHY\",\n  COUNT(*) FILTER (WHERE i.type = 'SSL_CERTIFICATE_EXPIRING') AS \"SSL_CERTIFICATE_EXPIRING\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE i.status = 'OPEN'\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Nomad Nodes",
+      "description": "Node Nomad dari monitoring_current_states. Active = state READY, Inactive = state selain READY.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 10,
+        "x": 14,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  COUNT(*) AS \"Total\",\n  COUNT(*) FILTER (WHERE m.state = 'READY') AS \"Active\",\n  COUNT(*) FILTER (WHERE m.state <> 'READY') AS \"Inactive\"\nFROM monitoring_current_states m\nJOIN clusters c ON c.cluster_id = m.cluster_id\nWHERE m.source = 'NOMAD'\n  AND m.resource_type = 'NODE'\n  AND c.site IN ($site)\n  AND m.cluster_id::text IN ($cluster)\n  AND ('__all' IN ($node) OR m.resource_name IN ($node))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Active"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inactive"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Trends",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Incidents Opened by Severity",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroupAlias(i.opened_at, $__interval, 0),\n  i.severity AS metric,\n  COUNT(*) AS value\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE $__timeFilter(i.opened_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)\nGROUP BY 1, 2\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "spanNulls": false,
+            "showPoints": "never"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CRITICAL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MAJOR"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "WARNING"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Opened vs Resolved",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroupAlias(i.opened_at, $__interval, 0),\n  COUNT(*) AS \"Opened\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE $__timeFilter(i.opened_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)\nGROUP BY 1\nORDER BY 1"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroupAlias(i.resolved_at, $__interval, 0),\n  COUNT(*) AS \"Resolved\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE i.status = 'RESOLVED'\n  AND $__timeFilter(i.resolved_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "spanNulls": false,
+            "showPoints": "never"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Opened"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Resolved"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Breakdown",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Top Noisy Resources",
+      "description": "Resource dengan incident terbanyak dalam time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  c.cluster_name AS \"Cluster\",\n  i.resource_type AS \"Resource Type\",\n  COALESCE(i.resource_name, i.resource_key) AS \"Resource\",\n  i.type AS \"Type\",\n  COUNT(*) AS \"Incidents\",\n  MAX(i.opened_at) AS \"Last Opened\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE $__timeFilter(i.opened_at)\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\n  AND i.status IN ($status)\nGROUP BY c.cluster_name, i.resource_type, COALESCE(i.resource_name, i.resource_key), i.type\nORDER BY \"Incidents\" DESC\nLIMIT 10"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Opened"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "enablePagination": true
+        },
+        "sortBy": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Open Incidents",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Open Incidents",
+      "description": "Semua incident OPEN saat ini (tidak terpengaruh time range).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  i.public_id AS \"Incident\",\n  i.severity AS \"Severity\",\n  c.cluster_name AS \"Cluster\",\n  c.site AS \"Site\",\n  i.source AS \"Source\",\n  i.type AS \"Type\",\n  i.resource_type AS \"Resource Type\",\n  COALESCE(i.resource_name, i.resource_key) AS \"Resource\",\n  i.message AS \"Message\",\n  i.opened_at AS \"Opened At\",\n  EXTRACT(EPOCH FROM ((NOW() AT TIME ZONE 'UTC') - i.opened_at)) AS \"Age\",\n  i.last_detected_at AS \"Last Detected\",\n  i.reminder_count AS \"Reminders\",\n  i.last_notification_at AS \"Last Notification\",\n  c.is_active AS \"Cluster Active\"\nFROM incidents i\nJOIN clusters c ON c.cluster_id = i.cluster_id\nWHERE i.status = 'OPEN'\n  AND c.site IN ($site)\n  AND i.cluster_id::text IN ($cluster)\n  AND i.severity IN ($severity)\n  AND i.source IN ($source)\n  AND ('__all' IN ($node) OR CASE i.resource_type\n    WHEN 'NODE' THEN i.resource_name\n    WHEN 'DRIVER' THEN i.context_json->>'nodeName'\n    WHEN 'ALLOCATION' THEN i.context_json->'currentAllocation'->>'NodeName'\n  END IN ($node))\nORDER BY\n  CASE i.severity WHEN 'CRITICAL' THEN 0 WHEN 'MAJOR' THEN 1 ELSE 2 END,\n  i.opened_at"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "CRITICAL": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "MAJOR": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "WARNING": {
+                        "color": "yellow",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Incident"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Opened At"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Detected"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Notification"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "enablePagination": true
+        },
+        "sortBy": []
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "SSL Certificates",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "SSL Certificate Expiry",
+      "description": "ssl_monitoring dengan is_active = TRUE, urut dari yang paling cepat expired.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  c.cluster_name AS \"Cluster\",\n  c.site AS \"Site\",\n  s.subject_cn AS \"Subject CN\",\n  s.issuer_cn AS \"Issuer CN\",\n  s.expires_at AS \"Expires At\",\n  s.days_remaining AS \"Days Remaining\",\n  s.last_checked_at AS \"Last Checked\"\nFROM ssl_monitoring s\nJOIN clusters c ON c.cluster_id = s.cluster_id\nWHERE s.is_active = TRUE\n  AND c.site IN ($site)\n  AND s.cluster_id::text IN ($cluster)\nORDER BY s.expires_at"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Days Remaining"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 31
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Expires At"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Checked"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "enablePagination": true
+        },
+        "sortBy": []
+      }
+    }
+  ]
+}

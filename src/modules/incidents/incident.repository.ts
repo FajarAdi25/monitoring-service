@@ -23,6 +23,12 @@ export class IncidentRepository {
     });
   }
 
+  findOpenByClusterAndType(clusterId: string, type: string): Promise<IncidentEntity[]> {
+    return this.repository.find({
+      where: { clusterId, type, status: IncidentStatus.OPEN }
+    });
+  }
+
   create(input: DeepPartial<IncidentEntity>): IncidentEntity {
     return this.repository.create(input);
   }
