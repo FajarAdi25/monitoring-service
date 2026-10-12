@@ -30,7 +30,19 @@ interface AllocationSlotResult {
   failedAllocation: NomadAllocation | null;
   payload: Record<string, unknown>;
   snapshotChanged: boolean;
+  /** When the slot entered its current state. */
+  stateSince: Date;
+  /** False when the current allocation is being stopped or evicted (scale-down, old deployment). */
+  desired: boolean;
 }
+
+/**
+ * An open ALLOCATION_FAILED / EVALUATION_BLOCKED incident is only resolved
+ * after the job has been healthy for this long, so a replacement allocation
+ * that runs briefly, or a blocked evaluation being replaced, does not resolve
+ * and reopen the alert.
+ */
+const RECOVERY_HOLD_MS = 2 * 60 * 1000;
 
 export class NomadService {
   private pulling = false;
@@ -408,11 +420,31 @@ export class NomadService {
       jobSlots.set(key, entry);
     }
 
+    const openIncidents = await this.alerting.findOpenIncidents(clusterId, "ALLOCATION_FAILED");
+    const openFingerprints = new Set(openIncidents.map(incident => incident.activeFingerprint));
     const failingFingerprints = new Set<string>();
 
     for (const [jobKey, { jobId, slots }] of jobSlots.entries()) {
+      const fingerprint = createNomadFingerprint({
+        clusterId: clusterId,
+        type: "ALLOCATION_FAILED",
+        resourceType: "ALLOCATION",
+        resourceKey: jobKey
+      });
       const failedSlots = slots.filter(slot => slot.failedAllocation !== null);
-      if (failedSlots.length === 0) continue;
+
+      if (failedSlots.length === 0) {
+        // Keep an open incident (without updating it) until every slot of the
+        // still-running job has been running for RECOVERY_HOLD_MS.
+        if (
+          openFingerprints.has(fingerprint)
+          && runningJobKeys.has(jobKey)
+          && slots.some(slot => !this.isAllocationSlotSettled(slot, observedAt))
+        ) {
+          failingFingerprints.add(fingerprint);
+        }
+        continue;
+      }
 
       const running = slots.filter(slot => slot.state === "RUNNING").length;
       const total = slots.length;
@@ -422,12 +454,6 @@ export class NomadService {
       )[0];
       const latestDescription = latest.failedAllocation!.ClientDescription;
 
-      const fingerprint = createNomadFingerprint({
-        clusterId: clusterId,
-        type: "ALLOCATION_FAILED",
-        resourceType: "ALLOCATION",
-        resourceKey: jobKey
-      });
       failingFingerprints.add(fingerprint);
 
       await this.alerting.processFailure({
@@ -458,9 +484,8 @@ export class NomadService {
     }
 
     // Any other open ALLOCATION_FAILED incident of this cluster is resolved:
-    // its job has no failed allocation anymore, is stopped or purged, or it is
-    // a per-slot incident from before alerts were grouped per job.
-    const openIncidents = await this.alerting.findOpenIncidents(clusterId, "ALLOCATION_FAILED");
+    // its job has been healthy for RECOVERY_HOLD_MS, is stopped or purged, or
+    // it is a per-slot incident from before alerts were grouped per job.
     for (const incident of openIncidents) {
       if (!incident.activeFingerprint || failingFingerprints.has(incident.activeFingerprint)) continue;
       const resolved = await this.alerting.processRecovery({
@@ -500,6 +525,21 @@ export class NomadService {
     return `${namespace || "default"}:${jobId}`;
   }
 
+  /**
+   * A slot no longer holds an open incident when it is not desired anymore,
+   * or is in a final state other than FAILED / PENDING, or has been RUNNING
+   * for RECOVERY_HOLD_MS. A PENDING slot is a replacement that has not
+   * started yet.
+   */
+  private isAllocationSlotSettled(slot: AllocationSlotResult, observedAt: Date): boolean {
+    if (!slot.desired) return true;
+    if (slot.state === "FAILED" || slot.state === "PENDING") return false;
+    if (slot.state === "RUNNING") {
+      return observedAt.getTime() - slot.stateSince.getTime() >= RECOVERY_HOLD_MS;
+    }
+    return true;
+  }
+
   /** Records the current state of one logical allocation slot. */
   private async processAllocationSlot(
     clusterId: string,
@@ -511,8 +551,12 @@ export class NomadService {
   ): Promise<AllocationSlotResult> {
     const representative = this.selectAllocationRepresentative(allocations);
     const identity = identityOf(representative);
+    // A running allocation that Nomad is stopping (e.g. the old version during
+    // a deployment) does not count as running for the slot.
     const runningAllocation = this.selectMostRecentAllocation(
-      allocations.filter(allocation => this.allocationState(allocation) === "RUNNING")
+      allocations.filter(allocation =>
+        this.allocationState(allocation) === "RUNNING" && this.isAllocationDesired(allocation)
+      )
     );
     // Nomad does not set DesiredStatus=stop on allocations that were already
     // failed when the job is stopped, so the job state is checked as well.
@@ -564,8 +608,16 @@ export class NomadService {
       state,
       failedAllocation,
       payload,
-      snapshotChanged: snapshot.changed
+      snapshotChanged: snapshot.changed,
+      stateSince: snapshot.lastChangedAt,
+      desired: this.isAllocationDesired(effectiveAllocation)
     };
+  }
+
+  /** False when Nomad is stopping or evicting the allocation. */
+  private isAllocationDesired(allocation: NomadAllocation): boolean {
+    const desiredStatus = String(allocation.DesiredStatus ?? "").toUpperCase();
+    return desiredStatus !== "STOP" && desiredStatus !== "EVICT";
   }
 
   private selectAllocationRepresentative(allocations: NomadAllocation[]): NomadAllocation {
@@ -589,48 +641,26 @@ export class NomadService {
     return String(allocation.ClientStatus ?? "").toUpperCase();
   }
 
+  /**
+   * EVALUATION_BLOCKED is raised once per Nomad job. Nomad keeps replacing a
+   * blocked evaluation with a new one (new ID) while the job cannot be placed,
+   * so the evaluation ID would open a new incident every time.
+   */
   private async processBlockedEvaluations(clusterId: string, evaluations: NomadEvaluation[], observedAt: Date) {
     let snapshotChanges = 0;
     let failuresProcessed = 0;
     let recoveriesProcessed = 0;
-    const currentBlockedKeys = new Set<string>();
 
+    const blockedJobs = new Map<string, { resourceName: string; evaluations: NomadEvaluation[] }>();
     for (const evaluation of evaluations) {
       if (!evaluation.ID) continue;
-      currentBlockedKeys.add(evaluation.ID);
-      const snapshot = await this.monitoring.record({
-        clusterId: clusterId,
-        source: "NOMAD",
-        resourceType: "EVALUATION",
-        resourceKey: evaluation.ID,
-        resourceName: evaluation.JobID ?? evaluation.ID,
-        state: "BLOCKED",
-        payload: this.asPayload(evaluation),
-        observedAt
-      });
-      if (snapshot.changed) snapshotChanges += 1;
-
-      const fingerprint = createNomadFingerprint({
-        clusterId: clusterId,
-        type: "EVALUATION_BLOCKED",
-        resourceType: "EVALUATION",
-        resourceKey: evaluation.ID
-      });
-
-      await this.alerting.processFailure({
-        clusterId: clusterId,
-        source: "NOMAD",
-        type: "EVALUATION_BLOCKED",
-        severity: NOMAD_INCIDENT_SEVERITY.EVALUATION_BLOCKED,
-        resourceType: "EVALUATION",
-        resourceKey: evaluation.ID,
-        resourceName: evaluation.JobID ?? evaluation.ID,
-        fingerprint,
-        message: `Nomad evaluation ${evaluation.ID} is blocked.`,
-        context: this.asPayload(evaluation),
-        detectedAt: observedAt
-      });
-      failuresProcessed += 1;
+      const resourceKey = evaluation.JobID
+        ? this.jobKey(evaluation.Namespace, evaluation.JobID)
+        : evaluation.ID;
+      const entry = blockedJobs.get(resourceKey)
+        ?? { resourceName: evaluation.JobID ?? evaluation.ID, evaluations: [] };
+      entry.evaluations.push(evaluation);
+      blockedJobs.set(resourceKey, entry);
     }
 
     const latestStates = await this.monitoring.latestStates({
@@ -638,17 +668,54 @@ export class NomadService {
       source: "NOMAD",
       resourceType: "EVALUATION"
     });
+    const notBlockedSince = new Map<string, Date>();
+    const blockedFingerprints = new Set<string>();
 
-    for (const latest of latestStates) {
-      if (latest.state !== "BLOCKED" || currentBlockedKeys.has(latest.resourceKey)) continue;
+    for (const [resourceKey, { resourceName, evaluations: group }] of blockedJobs.entries()) {
+      const latest = [...group].sort((left, right) =>
+        Number(right.CreateIndex ?? 0) - Number(left.CreateIndex ?? 0)
+      )[0];
 
-      const fingerprint = createNomadFingerprint({
+      const snapshot = await this.monitoring.record({
         clusterId: clusterId,
-        type: "EVALUATION_BLOCKED",
+        source: "NOMAD",
         resourceType: "EVALUATION",
-        resourceKey: latest.resourceKey
+        resourceKey,
+        resourceName,
+        state: "BLOCKED",
+        payload: this.asPayload(latest),
+        observedAt
       });
-      const resolved = await this.alerting.processRecovery({ fingerprint, detectedAt: observedAt });
+      if (snapshot.changed) snapshotChanges += 1;
+
+      const fingerprint = this.evaluationFingerprint(clusterId, resourceKey);
+      blockedFingerprints.add(fingerprint);
+
+      await this.alerting.processFailure({
+        clusterId: clusterId,
+        source: "NOMAD",
+        type: "EVALUATION_BLOCKED",
+        severity: NOMAD_INCIDENT_SEVERITY.EVALUATION_BLOCKED,
+        resourceType: "EVALUATION",
+        resourceKey,
+        resourceName,
+        fingerprint,
+        message: `Nomad evaluation ${latest.ID} is blocked.`,
+        context: this.asPayload(latest),
+        detectedAt: observedAt
+      });
+      failuresProcessed += 1;
+    }
+
+    // Jobs (or per-evaluation keys from earlier versions) that are no longer blocked.
+    for (const latest of latestStates) {
+      if (blockedJobs.has(latest.resourceKey)) continue;
+
+      if (latest.state !== "BLOCKED") {
+        notBlockedSince.set(latest.resourceKey, latest.lastChangedAt);
+        continue;
+      }
+
       const recoverySnapshot = await this.monitoring.record({
         clusterId: clusterId,
         source: "NOMAD",
@@ -659,10 +726,34 @@ export class NomadService {
         observedAt
       });
       if (recoverySnapshot.changed) snapshotChanges += 1;
+      notBlockedSince.set(latest.resourceKey, recoverySnapshot.lastChangedAt);
+    }
+
+    // Resolve only after the job has not been blocked for RECOVERY_HOLD_MS.
+    const openIncidents = await this.alerting.findOpenIncidents(clusterId, "EVALUATION_BLOCKED");
+    for (const incident of openIncidents) {
+      if (!incident.activeFingerprint || blockedFingerprints.has(incident.activeFingerprint)) continue;
+
+      const since = notBlockedSince.get(incident.resourceKey);
+      if (since && observedAt.getTime() - since.getTime() < RECOVERY_HOLD_MS) continue;
+
+      const resolved = await this.alerting.processRecovery({
+        fingerprint: incident.activeFingerprint,
+        detectedAt: observedAt
+      });
       if (resolved) recoveriesProcessed += 1;
     }
 
     return { snapshotChanges, failuresProcessed, recoveriesProcessed };
+  }
+
+  private evaluationFingerprint(clusterId: string, resourceKey: string): string {
+    return createNomadFingerprint({
+      clusterId: clusterId,
+      type: "EVALUATION_BLOCKED",
+      resourceType: "EVALUATION",
+      resourceKey
+    });
   }
 
   private asPayload(value: object): Record<string, unknown> {

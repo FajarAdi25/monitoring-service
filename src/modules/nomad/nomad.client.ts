@@ -63,6 +63,7 @@ export class NomadClient {
 
   getBlockedEvaluations(): Promise<NomadEvaluation[]> {
     return this.get<NomadEvaluation[]>("/v1/evaluations", {
+      namespace: "*",
       filter: 'Status=="blocked"'
     });
   }

@@ -6,7 +6,8 @@ import type { SaveMonitoringSnapshotInput } from "./monitoring-snapshot.types";
 export class MonitoringObservationService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async record(input: SaveMonitoringSnapshotInput): Promise<{ changed: boolean }> {
+  /** `lastChangedAt` is when the resource entered its current state. */
+  async record(input: SaveMonitoringSnapshotInput): Promise<{ changed: boolean; lastChangedAt: Date }> {
     const observedAt = input.observedAt ?? new Date();
 
     return this.dataSource.transaction(async manager => {
@@ -23,6 +24,7 @@ export class MonitoringObservationService {
       });
 
       const changed = current === null || current.state !== input.state;
+      const lastChangedAt = changed || current === null ? observedAt : current.lastChangedAt;
 
       if (current === null) {
         await currentRepository.save(currentRepository.create({
@@ -58,7 +60,7 @@ export class MonitoringObservationService {
         }));
       }
 
-      return { changed };
+      return { changed, lastChangedAt };
     });
   }
 
@@ -66,7 +68,7 @@ export class MonitoringObservationService {
     clusterId: string;
     source: string;
     resourceType: string;
-  }): Promise<Array<{ resourceKey: string; state: string }>> {
+  }): Promise<Array<{ resourceKey: string; state: string; lastChangedAt: Date }>> {
     const repository = this.dataSource.getRepository(MonitoringCurrentStateEntity);
     const rows = await repository.find({
       where: {
@@ -76,10 +78,15 @@ export class MonitoringObservationService {
       },
       select: {
         resourceKey: true,
-        state: true
+        state: true,
+        lastChangedAt: true
       }
     });
 
-    return rows.map(row => ({ resourceKey: row.resourceKey, state: row.state }));
+    return rows.map(row => ({
+      resourceKey: row.resourceKey,
+      state: row.state,
+      lastChangedAt: row.lastChangedAt
+    }));
   }
 }

@@ -1,4 +1,4 @@
-# Monitoring Service v2.9.1
+# Monitoring Service v2.9.2
 
 Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, and incident alerting.
 
@@ -27,7 +27,9 @@ Recovery detected by monitoring engine
 
 ALLOCATION_FAILED is one incident per Nomad job (`resource_key` = `<namespace>:<job id>`), opened when at least 1 allocation slot of the job is failed. Slots are allocation indexes (`[0]`, `[1]`, ...) for service and batch jobs, and nodes for system and sysbatch jobs (Nomad job `Type`; all their allocations are named `[0]`). Each slot counts once: `running` when it has a running allocation, `failed` when its latest failed allocation is not replaced by a running one. Job status is `FAILED` (MAJOR) when no slot is running and `DEGRADED` (WARNING) when some slots are still running; the incident severity follows the current status.
 
-ALLOCATION_FAILED is resolved when the job has no failed slot anymore, when the job is stopped (`Stop = true`) or no longer registered (purged), or when its slots no longer exist in Nomad (garbage collected; the slot current state becomes `NOT_FOUND`). Open per-slot ALLOCATION_FAILED incidents created before v2.9.0 are resolved on the first pull.
+ALLOCATION_FAILED is resolved when every slot of the job has been `running` for at least 2 minutes (slots being stopped or evicted are ignored). While the incident is open, a `pending` replacement allocation or one running for less than 2 minutes keeps it open, so a rescheduled allocation that fails again stays one alert. A stopped (`Stop = true`) or purged job, or a job whose slots no longer exist in Nomad (garbage collected; the slot current state becomes `NOT_FOUND`), is resolved immediately. Open per-slot ALLOCATION_FAILED incidents created before v2.9.0 are resolved on the first pull.
+
+EVALUATION_BLOCKED is one incident per Nomad job (`resource_key` = `<namespace>:<job id>`; the evaluation ID when it has no job), raised while the job has at least 1 `blocked` evaluation in any namespace. Nomad replaces blocked evaluations with new IDs; the incident stays the same and its context shows the latest blocked evaluation. It is resolved after the job has not been blocked for at least 2 minutes. Open per-evaluation EVALUATION_BLOCKED incidents created before v2.9.2 are resolved after that hold.
 
 There is no `CLOSED` status, no Close Case API, and no ACK/POSTPONE action in the current lifecycle.
 
@@ -174,7 +176,7 @@ Example (`NODE_DOWN`, INITIAL):
   "metric_source": "hashicorp",
   "collector": {
     "name": "hashicorp-metric-collector",
-    "version": "2.9.1",
+    "version": "2.9.2",
     "source_instance": "Cluster WEST",
     "runtime_host": "monitoring-service-host"
   },
@@ -427,7 +429,7 @@ Monitoring Service runs as a plain Docker container started with `docker run`. D
 Build the backend image:
 
 ```bash
-docker build -t monitoring-service:2.9.1 .
+docker build -t monitoring-service:2.9.2 .
 ```
 
 ### Local
@@ -442,7 +444,7 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   --env-file .env.docker.local \
   -p 127.0.0.1:3001:3002 \
-  monitoring-service:2.9.1
+  monitoring-service:2.9.2
 ```
 
 ### Dev
@@ -456,7 +458,7 @@ docker run -d \
   --init \
   --env-file .env.docker.dev \
   -p 3001:3002 \
-  monitoring-service:2.9.1
+  monitoring-service:2.9.2
 ```
 
 Check the backend logs:
@@ -472,13 +474,13 @@ The startup command runs pending TypeORM migrations against the configured Postg
 Save only the backend image:
 
 ```bash
-docker save -o monitoring-service-2.9.1.tar monitoring-service:2.9.1
+docker save -o monitoring-service-2.9.2.tar monitoring-service:2.9.2
 ```
 
-Copy `monitoring-service-2.9.1.tar` to the destination server, then load it:
+Copy `monitoring-service-2.9.2.tar` to the destination server, then load it:
 
 ```bash
-docker load -i monitoring-service-2.9.1.tar
+docker load -i monitoring-service-2.9.2.tar
 ```
 
 Run it on the destination server with the `docker run` command for that environment (see Local or Dev above).

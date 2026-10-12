@@ -45,6 +45,7 @@ export interface NomadEvaluation {
   Status?: string;
   JobID?: string;
   Namespace?: string;
+  CreateIndex?: number;
   [key: string]: unknown;
 }
 

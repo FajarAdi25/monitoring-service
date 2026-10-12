@@ -1,3 +1,17 @@
+## v2.9.2 - Stop Alerts Flapping Between RESOLVED and FIRING
+
+- Fixed EVALUATION_BLOCKED resolving and re-firing with a new `alert_id` about every minute: Nomad replaces a blocked evaluation with a new evaluation ID while the job cannot be placed, and incidents were per evaluation ID.
+- EVALUATION_BLOCKED is now one incident per Nomad job (`resource_key` = `<namespace>:<job id>`, evaluation ID when there is no job). The context shows the latest blocked evaluation; title is unchanged.
+- EVALUATION_BLOCKED is resolved only after the job has not been blocked for 2 minutes.
+- Blocked evaluations are read from all namespaces (`GET /v1/evaluations?namespace=*`); before, only the `default` namespace was checked.
+- Fixed ALLOCATION_FAILED resolving and re-firing with a new `alert_id` when Nomad reschedules a failed allocation (replacement `pending`, or running briefly before failing again).
+- An open ALLOCATION_FAILED incident is resolved only when every slot of the job has been `running` for 2 minutes. `pending` slots and slots running for less than 2 minutes keep it open (without updating it). Stopped or purged jobs are still resolved immediately.
+- A running allocation that Nomad is stopping or evicting (`DesiredStatus` `stop` / `evict`, e.g. the old version during a deployment) no longer counts as running for its slot, so it cannot resolve an alert while the replacement is still `pending`.
+- Open per-evaluation EVALUATION_BLOCKED incidents from earlier versions are resolved (RESOLVED sent) after the 2-minute hold on the first pulls after upgrade.
+- `MonitoringObservationService` returns when a resource entered its current state (`last_changed_at`); used for the 2-minute hold.
+- Updated backend image version to `monitoring-service:2.9.2`.
+- No database schema, API, payload format, severity, or reminder interval changes.
+
 ## v2.9.1 - ALLOCATION_FAILED Slots per Node for System Jobs
 
 - Fixed ALLOCATION_FAILED counting for Nomad `system` and `sysbatch` jobs: all their allocations are named `[0]`, so every node was merged into one slot (e.g. `alloc fail 1 of 1`) and a running allocation on one node hid a failed allocation on another node.
