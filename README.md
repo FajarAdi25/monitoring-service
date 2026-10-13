@@ -1,13 +1,13 @@
-# Monitoring Service v2.9.2
+# Monitoring Service v2.10.1
 
-Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, SSL certificate expiry monitoring, current state, state-transition snapshots, and incident alerting.
+Node.js + TypeScript + TypeORM + PostgreSQL monitoring service for Nomad telemetry, Consul health, SSL certificate expiry monitoring, current state, state-transition snapshots, and incident alerting.
 
 ## Current incident lifecycle
 
 ```text
-Nomad Pull
+Nomad Pull / Consul Pull
   every 60 seconds
-  active clusters only (clusters.is_active = true)
+  active clusters only (clusters.is_active = true), per clusters.type
   noOverlap = true
   worker running guard = true
 
@@ -74,6 +74,14 @@ NOMAD_PULL_CRON="*/60 * * * * *"
 NOMAD_PULL_CRON_TZ=Asia/Jakarta
 NOMAD_PULL_RUN_ON_START=true
 
+CONSUL_ENABLED=true
+CONSUL_PULL_CRON="*/60 * * * * *"
+CONSUL_PULL_CRON_TZ=Asia/Jakarta
+CONSUL_PULL_RUN_ON_START=true
+CONSUL_REQUEST_TIMEOUT_MS=10000
+CONSUL_TLS_REJECT_UNAUTHORIZED=true
+CONSUL_TLS_CA_FILE=
+
 MONITORING_BASIC_AUTH_USERNAME=CHANGE_ME
 MONITORING_BASIC_AUTH_PASSWORD=replace-with-a-strong-random-password
 ```
@@ -82,7 +90,7 @@ MONITORING_BASIC_AUTH_PASSWORD=replace-with-a-strong-random-password
 
 All API routes except `GET /api/v1/dashboard/health` require `Authorization: Basic base64(<MONITORING_BASIC_AUTH_USERNAME>:<MONITORING_BASIC_AUTH_PASSWORD>)`. Use HTTPS in production because Basic Auth is Base64 encoding, not encryption.
 
-`NOMAD_PULL_CRON="*/60 * * * * *"` (default) means one pull every 60 seconds. `NomadPullWorker` keeps both `noOverlap: true` and its own `running` guard.
+`NOMAD_PULL_CRON="*/60 * * * * *"` (default) means one pull every 60 seconds. `NomadPullWorker` keeps both `noOverlap: true` and its own `running` guard. `CONSUL_PULL_CRON` works the same way for `ConsulPullWorker`, which runs separately from the Nomad puller.
 
 ## SSL certificate expiry monitoring
 
@@ -176,7 +184,7 @@ Example (`NODE_DOWN`, INITIAL):
   "metric_source": "hashicorp",
   "collector": {
     "name": "hashicorp-metric-collector",
-    "version": "2.9.2",
+    "version": "2.10.1",
     "source_instance": "Cluster WEST",
     "runtime_host": "monitoring-service-host"
   },
@@ -238,19 +246,28 @@ Field mapping:
 | `status` | INITIAL / REMINDER = `firing`, RESOLVED = `resolved` |
 | `severity` | `critical`, `major`, or `warning` |
 | `category` | `platform` |
-| `title` | `[<site>/<cluster name>] <incident type> - <resource name>`; ALLOCATION_FAILED: `[<site>/<cluster name>] ALLOCATION_FAILED - job <failed\|degraded> - alloc fail <failed> of <total> - <latest failed allocation name> on <node name>` (max 512 chars) |
+| `title` | `[<site>/<cluster name>] <incident type> - <resource name>`; ALLOCATION_FAILED: `[<site>/<cluster name>] ALLOCATION_FAILED - job <failed\|degraded> - alloc fail <failed> of <total> - <latest failed allocation name> on <node name>`; Consul: `[<site>/<cluster name>] <incident type> - <cause> on <resource name>` (see below) (max 512 chars) |
 | `description` | Incident message (max 4,096 chars) |
 | `started_at_ms` | `opened_at` in epoch ms |
 | `updated_at_ms` | firing: `last_detected_at`; resolved: `resolved_at` (always newer than the last firing record) |
 | `resolved_at_ms` | `null` while firing, `resolved_at` when resolved |
-| `entity.type` | NODE / DRIVER = `nomad_node`, ALLOCATION / EVALUATION = `other`, SSL = `cluster` |
+| `entity.type` | NODE / DRIVER = `nomad_node`, ALLOCATION / EVALUATION = `other`, SSL = `cluster`, CONSUL_SERVER = `consul_server`, CONSUL_CLUSTER / CONSUL_NODE / CONSUL_SERVICE = `other` |
 | `entity.name` | Resource name (max 256 chars) |
-| `entity.host_key` | NODE / DRIVER: node name, lowercase, up to the first dot; otherwise `""` |
-| `entity.source_id` | Resource key (Nomad ID) |
-| `entity.ip` | Nomad node address for NODE and DRIVER; omitted when not available |
+| `entity.host_key` | NODE / DRIVER / CONSUL_NODE / CONSUL_SERVER: node name, lowercase, up to the first dot; otherwise `""` |
+| `entity.source_id` | Resource key (Nomad ID; Consul `<datacenter>:<...>`) |
+| `entity.ip` | Nomad node address for NODE and DRIVER; Consul server address (without port) for CONSUL_SERVER; omitted when not available |
 | `trigger` | `null` (this service does not evaluate metric thresholds) |
 | `dimensions` | `cluster`, `site`, `app`, `env`; NODE also `datacenter` and `node_pool` when available |
 | `context` | Selected string values per resource type (see below) |
+
+Consul title `<cause>`:
+
+| Incident type | `<cause>` | Example |
+|---|---|---|
+| CONSUL_SERVICE_CRITICAL | `<check name>: <check output>` of the first unhealthy instance (output on one line); `node <node> down` when the instance is unhealthy only because its node is down | `[East 1/Consul East Lab] CONSUL_SERVICE_CRITICAL - HTTP /health: dial tcp 10.0.4.7:3002: connect: connection refused on alert-management-app` |
+| CONSUL_NODE_CRITICAL | Names of the critical node checks | `... CONSUL_NODE_CRITICAL - Serf Health Status on worker-07` |
+| CONSUL_SERVER_UNHEALTHY | `serf <status>`; `unhealthy` when serf is `alive` | `... CONSUL_SERVER_UNHEALTHY - serf failed on server-2` |
+| CONSUL_NO_LEADER | `no leader` | `... CONSUL_NO_LEADER - no leader on dc1` |
 
 `dimensions` and `context` are string-to-string maps (max 20 keys, values max 256 chars). Empty values are omitted.
 
@@ -261,6 +278,10 @@ Field mapping:
 | ALLOCATION | `namespace`, `job_id`, `job_status`, `failed_allocations`, `running_allocations`, `total_allocations`, `task_group`, `slot`, `allocation_id`, `node_name`, `client_status`, `client_description` |
 | EVALUATION | `evaluation_id`, `job_id`, `namespace`, `status`, `status_description` |
 | SSL | `endpoint`, `valid_from`, `expires_at`, `days_remaining`, `subject_cn`, `issuer_cn`, `certificate_fingerprint256` |
+| CONSUL_CLUSTER | `datacenter`, `leader` |
+| CONSUL_SERVER | `datacenter`, `server_id`, `server_name`, `address`, `serf_status`, `leader`, `voter`, `last_contact`, `version` |
+| CONSUL_NODE | `datacenter`, `node`, `critical_checks`, `output` (first critical check) |
+| CONSUL_SERVICE | `datacenter`, `service`, `service_status`, `unhealthy_instances`, `total_instances`, `unhealthy_service_ids`, `unhealthy_nodes` |
 
 REINTAKE forwards a Telegram message only once per `alert_id` + `status` + `severity`, so REMINDER batches are stored by REINTAKE but do not create new Telegram messages. A severity change does.
 
@@ -343,6 +364,59 @@ POST /api/v1/nomad/pull
 
 `cluster` is optional. List endpoints without it flatten results from all active clusters and add `clusterId`, `clusterName`, `site`, `appName`, and `env` to each item. Unscoped detail lookup returns `NOMAD_RESOURCE_NOT_FOUND` when no cluster matches and `NOMAD_RESOURCE_CLUSTER_AMBIGUOUS` when more than one cluster matches. All-cluster pull returns one success/error outcome per cluster and continues when one cluster fails.
 
+The Nomad pull and API use only clusters with `type = 'NOMAD'` (the default for existing rows). A `?cluster=<id>` of another type returns `CLUSTER_NOT_FOUND`.
+
+## Consul monitoring
+
+Consul clusters are rows in the same `clusters` table with `type = 'CONSUL'`: `url` is the Consul HTTP address and `token` is the Consul ACL token (sent as `X-Consul-Token`). A cluster that runs both Nomad and Consul has two rows.
+
+```sql
+INSERT INTO clusters (cluster_id, url, cluster_name, site, app_name, env, token, type)
+VALUES (101, 'https://consul.example:8501', 'Consul WEST', 'cawang', 'Consul West', 'PRODUCTION', '<acl token>', 'CONSUL');
+```
+
+The ACL token needs `node:read`, `service:read`, and `operator:read`.
+
+Every pull (`CONSUL_PULL_CRON`, default every 60 seconds) reads, for each Consul cluster and each datacenter from `GET /v1/catalog/datacenters`:
+
+| Consul API | Used for |
+|---|---|
+| `GET /v1/status/leader?dc=` | Leader of the datacenter |
+| `GET /v1/health/state/any?dc=&stale` | All node and service checks (stale read, so it still answers without a leader); the `X-Consul-KnownLeader` header |
+| `GET /v1/operator/autopilot/health?dc=` | Raft server health (HTTP 429 = unhealthy cluster, body is still used); skipped when the datacenter has no leader |
+
+Incidents (`source = 'CONSUL'`):
+
+| Type | `resource_type` | `resource_key` | Opened when | Severity | Resolved |
+|---|---|---|---|---|---|
+| `CONSUL_NO_LEADER` | `CONSUL_CLUSTER` | `<dc>` | `/status/leader` is empty (or 500 `No cluster leader`), or `X-Consul-KnownLeader: false` | CRITICAL | immediately when a leader is back |
+| `CONSUL_SERVER_UNHEALTHY` | `CONSUL_SERVER` | `<dc>:<raft id>` | autopilot `Healthy = false` for the server | CRITICAL | immediately; kept as is while the datacenter has no leader |
+| `CONSUL_NODE_CRITICAL` | `CONSUL_NODE` | `<dc>:<node>` | a node-level check (no `ServiceID`, e.g. `serfHealth`) is `critical` | CRITICAL | immediately |
+| `CONSUL_SERVICE_CRITICAL` | `CONSUL_SERVICE` | `<dc>:<service name>` | at least 1 instance is unhealthy | MAJOR when all instances are unhealthy (`FAILED`), WARNING when some are (`DEGRADED`) | after every instance has been healthy for 2 minutes; immediately when the service is deregistered |
+
+CONSUL_SERVICE_CRITICAL is one incident per service; its severity follows the current status. An instance (`ServiceID` on a node) is unhealthy when one of its checks is `critical` or the `serfHealth` check of its node is `critical` (Consul keeps the service checks of a dead node at their last status). Instances without any check are not visible in `/health/state` and are not counted. `warning` checks are recorded in the current state but do not open an incident.
+
+Current state / snapshots (`source = 'CONSUL'`):
+
+| `resource_type` | `state` |
+|---|---|
+| `CONSUL_CLUSTER` | `LEADER_OK`, `NO_LEADER` |
+| `CONSUL_SERVER` | `HEALTHY`, `UNHEALTHY` |
+| `CONSUL_NODE` | `PASSING`, `WARNING`, `CRITICAL` (worst node-level check) |
+| `CONSUL_SERVICE` | `HEALTHY`, `WARNING`, `DEGRADED`, `FAILED`, `NOT_FOUND` (deregistered) |
+
+API:
+
+```text
+GET  /api/v1/consul/datacenters?cluster=101
+GET  /api/v1/consul/health?state=critical&dc=dc1&cluster=101
+GET  /api/v1/consul/autopilot?dc=dc1&cluster=101
+POST /api/v1/consul/pull?cluster=101
+POST /api/v1/consul/pull
+```
+
+`cluster` and `dc` are optional (`dc` defaults to the datacenter of the Consul agent). `state` is `any`, `passing`, `warning`, or `critical` (default `critical`). Responses add `clusterId`, `clusterName`, `site`, `appName`, and `env`. All-cluster pull returns one success/error outcome per cluster and continues when one cluster fails. The Consul API and pull use only active clusters with `type = 'CONSUL'`.
+
 ## Dashboard API
 
 ```text
@@ -417,6 +491,16 @@ DRIVER_UNHEALTHY    -> CRITICAL
 
 Nilai severity tidak lagi diambil dari environment variable.
 
+## Consul severity mapping
+
+```text
+CONSUL_NO_LEADER         -> CRITICAL
+CONSUL_SERVER_UNHEALTHY  -> CRITICAL
+CONSUL_NODE_CRITICAL     -> CRITICAL
+CONSUL_SERVICE_CRITICAL  -> MAJOR   (service failed: all instances unhealthy)
+                            WARNING (service degraded: some instances unhealthy)
+```
+
 ## Docker backend deployment
 
 Monitoring Service runs as a plain Docker container started with `docker run`. Docker Compose is not used. PostgreSQL is not part of the backend image; the backend connects to it over the network using the database environment variables.
@@ -429,7 +513,7 @@ Monitoring Service runs as a plain Docker container started with `docker run`. D
 Build the backend image:
 
 ```bash
-docker build -t monitoring-service:2.9.2 .
+docker build -t monitoring-service:2.10.1 .
 ```
 
 ### Local
@@ -444,7 +528,7 @@ docker run -d \
   --add-host=host.docker.internal:host-gateway \
   --env-file .env.docker.local \
   -p 127.0.0.1:3001:3002 \
-  monitoring-service:2.9.2
+  monitoring-service:2.10.1
 ```
 
 ### Dev
@@ -458,7 +542,7 @@ docker run -d \
   --init \
   --env-file .env.docker.dev \
   -p 3001:3002 \
-  monitoring-service:2.9.2
+  monitoring-service:2.10.1
 ```
 
 Check the backend logs:
@@ -474,13 +558,13 @@ The startup command runs pending TypeORM migrations against the configured Postg
 Save only the backend image:
 
 ```bash
-docker save -o monitoring-service-2.9.2.tar monitoring-service:2.9.2
+docker save -o monitoring-service-2.10.1.tar monitoring-service:2.10.1
 ```
 
-Copy `monitoring-service-2.9.2.tar` to the destination server, then load it:
+Copy `monitoring-service-2.10.1.tar` to the destination server, then load it:
 
 ```bash
-docker load -i monitoring-service-2.9.2.tar
+docker load -i monitoring-service-2.10.1.tar
 ```
 
 Run it on the destination server with the `docker run` command for that environment (see Local or Dev above).

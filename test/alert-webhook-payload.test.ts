@@ -1,4 +1,4 @@
-// Version: 2.9.0
+// Version: 2.10.1
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAlertWebhookPayload } from "../src/modules/alerting/alerting.notifier";
@@ -267,4 +267,153 @@ test("long values are truncated to contract limits", () => {
   assert.equal(alert.entity.name.length, 256);
   assert.ok(alert.entity.host_key.length <= 256);
   assert.equal(alert.dimensions.cluster.length, 256);
+});
+
+test("Consul resource types map to entity.type, host, ip and context", () => {
+  const server = buildAlertWebhookPayload({
+    kind: "INITIAL",
+    incident: incident({
+      source: "CONSUL",
+      type: "CONSUL_SERVER_UNHEALTHY",
+      resourceType: "CONSUL_SERVER",
+      resourceKey: "dc1:raft-1",
+      resourceName: "consul-server-1.dc.local",
+      contextJson: {
+        datacenter: "dc1",
+        ID: "raft-1",
+        Name: "consul-server-1.dc.local",
+        Address: "10.40.0.11:8300",
+        SerfStatus: "failed",
+        Leader: false,
+        Voter: true,
+        Healthy: false,
+      },
+    }),
+  }, cluster).alerts[0];
+  assert.equal(server.entity.type, "consul_server");
+  assert.equal(server.entity.host_key, "consul-server-1");
+  assert.equal((server.entity as { ip?: string }).ip, "10.40.0.11");
+  assert.equal(server.context.serf_status, "failed");
+  assert.equal(server.context.voter, "true");
+
+  const node = buildAlertWebhookPayload({
+    kind: "INITIAL",
+    incident: incident({
+      source: "CONSUL",
+      type: "CONSUL_NODE_CRITICAL",
+      resourceType: "CONSUL_NODE",
+      resourceKey: "dc1:worker-07",
+      resourceName: "worker-07",
+      contextJson: {
+        datacenter: "dc1",
+        node: "worker-07",
+        checks: [{ checkId: "serfHealth", name: "Serf Health Status", status: "critical", output: "Agent not live" }],
+      },
+    }),
+  }, cluster).alerts[0];
+  assert.equal(node.entity.type, "other");
+  assert.equal(node.entity.host_key, "worker-07");
+  assert.equal("ip" in node.entity, false);
+  assert.deepEqual(node.context, {
+    datacenter: "dc1",
+    node: "worker-07",
+    critical_checks: "Serf Health Status",
+    output: "Agent not live",
+  });
+
+  const service = buildAlertWebhookPayload({
+    kind: "INITIAL",
+    incident: incident({
+      source: "CONSUL",
+      type: "CONSUL_SERVICE_CRITICAL",
+      severity: IncidentSeverity.WARNING,
+      resourceType: "CONSUL_SERVICE",
+      resourceKey: "dc1:payment-api",
+      resourceName: "payment-api",
+      contextJson: {
+        datacenter: "dc1",
+        service: "payment-api",
+        status: "DEGRADED",
+        total: 3,
+        unhealthy: 1,
+        instances: [{ serviceId: "payment-api-2", node: "worker-07", reason: "NODE_DOWN", checks: [] }],
+      },
+    }),
+  }, cluster).alerts[0];
+  assert.equal(service.entity.type, "other");
+  assert.equal(service.entity.host_key, "");
+  assert.equal(service.title, "[cawang/Cluster WEST] CONSUL_SERVICE_CRITICAL - node worker-07 down on payment-api");
+  assert.equal(server.title, "[cawang/Cluster WEST] CONSUL_SERVER_UNHEALTHY - serf failed on consul-server-1.dc.local");
+  assert.equal(node.title, "[cawang/Cluster WEST] CONSUL_NODE_CRITICAL - Serf Health Status on worker-07");
+  assert.deepEqual(service.context, {
+    datacenter: "dc1",
+    service: "payment-api",
+    service_status: "DEGRADED",
+    unhealthy_instances: "1",
+    total_instances: "3",
+    unhealthy_service_ids: "payment-api-2",
+    unhealthy_nodes: "worker-07",
+  });
+  for (const alert of [server, node, service]) {
+    assert.ok(ENTITY_TYPES.includes(alert.entity.type));
+    assertStringMap(alert.dimensions);
+    assertStringMap(alert.context);
+  }
+});
+
+test("Consul titles show the cause: check name and output, no leader, alive server", () => {
+  const title = (overrides: Partial<IncidentEntity>) =>
+    buildAlertWebhookPayload({ kind: "INITIAL", incident: incident({ source: "CONSUL", ...overrides }) }, cluster)
+      .alerts[0].title;
+
+  assert.equal(
+    title({
+      type: "CONSUL_SERVICE_CRITICAL",
+      severity: IncidentSeverity.MAJOR,
+      resourceType: "CONSUL_SERVICE",
+      resourceKey: "dc1:alert-management-app",
+      resourceName: "alert-management-app",
+      contextJson: {
+        datacenter: "dc1",
+        service: "alert-management-app",
+        status: "FAILED",
+        total: 1,
+        unhealthy: 1,
+        instances: [{
+          serviceId: "alert-management-app-1",
+          node: "worker-01",
+          reason: "SERVICE_CHECK",
+          checks: [{
+            checkId: "service:alert-management-app-1",
+            name: "HTTP /health",
+            status: "critical",
+            output: "Get \"http://10.0.4.7:3002/health\":\n  dial tcp 10.0.4.7:3002: connect: connection refused\n",
+          }],
+        }],
+      },
+    }),
+    "[cawang/Cluster WEST] CONSUL_SERVICE_CRITICAL - HTTP /health: Get \"http://10.0.4.7:3002/health\": dial tcp 10.0.4.7:3002: connect: connection refused on alert-management-app",
+  );
+
+  assert.equal(
+    title({
+      type: "CONSUL_NO_LEADER",
+      resourceType: "CONSUL_CLUSTER",
+      resourceKey: "dc1",
+      resourceName: "dc1",
+      contextJson: { datacenter: "dc1", leader: null },
+    }),
+    "[cawang/Cluster WEST] CONSUL_NO_LEADER - no leader on dc1",
+  );
+
+  assert.equal(
+    title({
+      type: "CONSUL_SERVER_UNHEALTHY",
+      resourceType: "CONSUL_SERVER",
+      resourceKey: "dc1:raft-2",
+      resourceName: "server-2",
+      contextJson: { datacenter: "dc1", ID: "raft-2", Name: "server-2", SerfStatus: "alive", Healthy: false },
+    }),
+    "[cawang/Cluster WEST] CONSUL_SERVER_UNHEALTHY - unhealthy on server-2",
+  );
 });

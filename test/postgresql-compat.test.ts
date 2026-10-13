@@ -1,4 +1,4 @@
-// Version: 2.7.1
+// Version: 2.10.0
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DataSource } from "typeorm";
@@ -44,5 +44,5 @@ test("TypeORM datasource is PostgreSQL and defaults to port 5432", async () => {
 
   assert.equal(AppDataSource.options.type, "postgres");
   assert.equal(env.db.port, 5432);
-  assert.equal(AppDataSource.options.migrations?.length, 5);
+  assert.equal(AppDataSource.options.migrations?.length, 6);
 });

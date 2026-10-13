@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { env } from "./config/env";
 import { AppDataSource } from "./database/data-source";
 import { createAlertingModule } from "./modules/alerting/alerting.module";
+import { createConsulModule } from "./modules/consul/consul.module";
 import { createNomadModule } from "./modules/nomad/nomad.module";
 import { createSslCertificateModule } from "./modules/ssl-certificate/ssl-certificate.module";
 
@@ -24,13 +25,22 @@ async function bootstrap(): Promise<void> {
     tlsCaFile: env.nomad.tlsCaFile
   });
 
+  const consul = createConsulModule(AppDataSource, alerting.service, {
+    pullCron: env.consul.pullCron,
+    pullCronTimezone: env.consul.pullCronTimezone,
+    pullRunOnStart: env.consul.pullRunOnStart,
+    requestTimeoutMs: env.consul.requestTimeoutMs,
+    tlsRejectUnauthorized: env.consul.tlsRejectUnauthorized,
+    tlsCaFile: env.consul.tlsCaFile
+  });
+
   const sslCertificate = createSslCertificateModule(
     AppDataSource,
     alerting.service,
     env.nomad.requestTimeoutMs
   );
 
-  const app = createApp({ nomadService: nomad.service });
+  const app = createApp({ nomadService: nomad.service, consulService: consul.service });
   const server = app.listen(env.appPort, () => {
     console.log(`Monitoring Service listening on port ${env.appPort}`);
     alerting.worker.start();
@@ -45,12 +55,20 @@ async function bootstrap(): Promise<void> {
     } else {
       console.log("Nomad puller disabled by NOMAD_ENABLED=false");
     }
+
+    if (env.consul.enabled) {
+      consul.worker.start();
+      console.log(`Consul puller cron active; schedule=${env.consul.pullCron}; timezone=${env.consul.pullCronTimezone}`);
+    } else {
+      console.log("Consul puller disabled by CONSUL_ENABLED=false");
+    }
   });
 
   const shutdown = async (): Promise<void> => {
     alerting.worker.stop();
     sslCertificate.worker.stop();
     nomad.worker.stop();
+    consul.worker.stop();
     server.close();
     if (AppDataSource.isInitialized) {
       await AppDataSource.destroy();

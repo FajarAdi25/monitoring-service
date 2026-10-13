@@ -1,7 +1,7 @@
-// Version: 2.7.0
+// Version: 2.10.0
 import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from "typeorm";
 import type { Timestamp } from "../../common/types/timestamp";
-import { ClusterEnvironment } from "./cluster.enums";
+import { ClusterEnvironment, ClusterType } from "./cluster.enums";
 
 @Entity({ name: "clusters" })
 export class ClusterEntity {
@@ -25,6 +25,10 @@ export class ClusterEntity {
 
   @Column({ type: "varchar", length: 512 })
   token!: string;
+
+  /** NOMAD: `url` / `token` point to Nomad. CONSUL: `url` / `token` point to Consul. */
+  @Column({ type: "enum", enum: ClusterType, enumName: "clusters_type_enum", default: ClusterType.NOMAD })
+  type!: ClusterType;
 
   @Column({ name: "ssl_monitoring", type: "boolean", default: false })
   sslMonitoring!: boolean;

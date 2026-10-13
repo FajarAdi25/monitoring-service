@@ -1,4 +1,4 @@
-// Version: 2.7.0
+// Version: 2.10.0
 import express from "express";
 import { AppDataSource } from "./database/data-source";
 import { basicAuthMiddleware } from "./common/middleware/basic-auth.middleware";
@@ -23,6 +23,9 @@ import { MonitoringSnapshotRepository } from "./modules/monitoring/monitoring-sn
 import { MonitoringSnapshotService } from "./modules/monitoring/monitoring-snapshot.service";
 import { MonitoringSnapshotController } from "./modules/monitoring/monitoring-snapshot.controller";
 import { createMonitoringRouter } from "./modules/monitoring/monitoring-snapshot.routes";
+import { ConsulController } from "./modules/consul/consul.controller";
+import { createConsulRouter } from "./modules/consul/consul.routes";
+import type { ConsulService } from "./modules/consul/consul.service";
 import { NomadController } from "./modules/nomad/nomad.controller";
 import { createNomadRouter } from "./modules/nomad/nomad.routes";
 import type { NomadService } from "./modules/nomad/nomad.service";
@@ -32,6 +35,7 @@ import { SslMonitoringController } from "./modules/ssl-certificate/ssl-monitorin
 
 export interface AppDependencies {
   nomadService: NomadService;
+  consulService: ConsulService;
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -69,6 +73,7 @@ export function createApp(dependencies: AppDependencies) {
   const dashboardController = new DashboardController(dashboardService);
 
   const nomadController = new NomadController(dependencies.nomadService);
+  const consulController = new ConsulController(dependencies.consulService);
 
   app.use("/api/v1/incidents", createIncidentRouter(incidentController));
   app.use("/api/v1/dashboard", createDashboardRouter(dashboardController));
@@ -77,6 +82,7 @@ export function createApp(dependencies: AppDependencies) {
     createMonitoringRouter(snapshotController, currentStateController, sslMonitoringController)
   );
   app.use("/api/v1/nomad", createNomadRouter(nomadController));
+  app.use("/api/v1/consul", createConsulRouter(consulController));
 
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);

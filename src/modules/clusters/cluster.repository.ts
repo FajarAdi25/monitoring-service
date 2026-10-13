@@ -1,5 +1,6 @@
 import { DataSource, In, Repository } from "typeorm";
 import { ClusterEntity } from "./cluster.entity";
+import type { ClusterType } from "./cluster.enums";
 import type { ClusterMetadata, ClusterRepositoryPort } from "./cluster.types";
 import { toClusterMetadata } from "./cluster.types";
 
@@ -10,9 +11,9 @@ export class ClusterRepository implements ClusterRepositoryPort {
     this.repository = dataSource.getRepository(ClusterEntity);
   }
 
-  findActive(): Promise<ClusterEntity[]> {
+  findActive(type: ClusterType): Promise<ClusterEntity[]> {
     return this.repository.find({
-      where: { isActive: true },
+      where: { isActive: true, type },
       order: { clusterId: "ASC" }
     });
   }

@@ -1,3 +1,27 @@
+## v2.10.1 - Consul Alert Title Shows the Cause
+
+- Consul alert titles now show why the incident fired: `[<site>/<cluster>] <type> - <cause> on <resource name>`.
+- CONSUL_SERVICE_CRITICAL: `<check name>: <check output>` of the first unhealthy instance (output joined on one line); `node <node> down` when the instance is unhealthy only because its node is down. Example: `[East 1/Consul East Lab] CONSUL_SERVICE_CRITICAL - HTTP /health: dial tcp ...: connection refused on alert-management-app`.
+- CONSUL_NODE_CRITICAL: names of the critical node checks. CONSUL_SERVER_UNHEALTHY: `serf <status>` (`unhealthy` when serf is `alive`). CONSUL_NO_LEADER: `no leader`.
+- Titles are still cut at 512 characters.
+- Updated backend image version to `monitoring-service:2.10.1`.
+- No Nomad/SSL title, incident, severity, context, database schema, or API changes.
+
+## v2.10.0 - Consul Puller and Incidents
+
+- New Consul puller (`src/modules/consul`): every `CONSUL_PULL_CRON` (default every 60 seconds), for each active cluster with `type = 'CONSUL'` and each datacenter, reads `GET /v1/catalog/datacenters`, `/v1/status/leader`, `/v1/health/state/any` (stale read), and `/v1/operator/autopilot/health` with the cluster token in `X-Consul-Token`.
+- New incidents (`source = 'CONSUL'`): `CONSUL_NO_LEADER` (CRITICAL), `CONSUL_SERVER_UNHEALTHY` (CRITICAL), `CONSUL_NODE_CRITICAL` (CRITICAL), and `CONSUL_SERVICE_CRITICAL` (one incident per service: MAJOR when all instances are unhealthy, WARNING when some are).
+- A service instance is unhealthy when one of its checks is `critical` or its node's `serfHealth` check is `critical`. `warning` checks are only recorded in the current state.
+- CONSUL_SERVICE_CRITICAL is resolved after every instance has been healthy for 2 minutes, or immediately when the service is deregistered (current state `NOT_FOUND`). Leader, server, and node incidents are resolved immediately; server incidents are kept while the datacenter has no leader.
+- Current state / snapshots for `CONSUL_CLUSTER`, `CONSUL_SERVER`, `CONSUL_NODE`, and `CONSUL_SERVICE`.
+- New API: `GET /api/v1/consul/datacenters`, `GET /api/v1/consul/health`, `GET /api/v1/consul/autopilot`, `POST /api/v1/consul/pull` (admin).
+- New environment variables: `CONSUL_ENABLED`, `CONSUL_PULL_CRON`, `CONSUL_PULL_CRON_TZ`, `CONSUL_PULL_RUN_ON_START`, `CONSUL_REQUEST_TIMEOUT_MS`, `CONSUL_TLS_REJECT_UNAUTHORIZED`, `CONSUL_TLS_CA_FILE` (`.env*.example` files updated).
+- Database: migration `AddTypeToClusters` adds `clusters.type` (`clusters_type_enum`: `NOMAD`, `CONSUL`, default `NOMAD`). Existing rows become `NOMAD`.
+- The Nomad pull and Nomad API now use only clusters with `type = 'NOMAD'`; a `?cluster=<id>` of another type returns `CLUSTER_NOT_FOUND`.
+- REINTAKE alerts: `CONSUL_SERVER` maps to `entity.type` `consul_server`, other Consul resources to `other`; `host_key` for Consul nodes and servers, `ip` for Consul servers; Consul `context` keys added.
+- Updated backend image version to `monitoring-service:2.10.0`.
+- No Nomad incident, severity, reminder interval, or payload format changes. No dashboard or Grafana changes.
+
 ## v2.9.2 - Stop Alerts Flapping Between RESOLVED and FIRING
 
 - Fixed EVALUATION_BLOCKED resolving and re-firing with a new `alert_id` about every minute: Nomad replaces a blocked evaluation with a new evaluation ID while the job cannot be placed, and incidents were per evaluation ID.

@@ -1,6 +1,7 @@
 import { AppError } from "../../common/errors/app-error";
 import { AlertingService } from "../alerting/alerting.service";
 import type { ClusterEntity } from "../clusters/cluster.entity";
+import { ClusterType } from "../clusters/cluster.enums";
 import type { ClusterRepositoryPort } from "../clusters/cluster.types";
 import { serializeClusterId, toClusterMetadata } from "../clusters/cluster.types";
 import { MonitoringObservationService } from "../monitoring/monitoring-observation.service";
@@ -122,9 +123,9 @@ export class NomadService {
   }
 
   private async selectedClusters(clusterId?: string): Promise<ClusterEntity[]> {
-    if (!clusterId) return this.clusters.findActive();
+    if (!clusterId) return this.clusters.findActive(ClusterType.NOMAD);
     const cluster = await this.clusters.findById(clusterId);
-    if (!cluster || !cluster.isActive) {
+    if (!cluster || !cluster.isActive || cluster.type !== ClusterType.NOMAD) {
       throw new AppError(404, "CLUSTER_NOT_FOUND", `Cluster ${clusterId} was not found or is inactive.`);
     }
     return [cluster];

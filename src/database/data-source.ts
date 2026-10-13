@@ -1,4 +1,4 @@
-// Version: 2.7.1
+// Version: 2.10.0
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { env } from "../config/env";
@@ -13,6 +13,7 @@ import { AddIsActiveToClustersAndSslMonitoring1790000000000 } from "./migrations
 import { DropIncidentAcknowledgePostpone1790000100000 } from "./migrations/1790000100000-DropIncidentAcknowledgePostpone";
 import { DropRelayDeliveries1790000200000 } from "./migrations/1790000200000-DropRelayDeliveries";
 import { CreateAlertDeliveries1790000300000 } from "./migrations/1790000300000-CreateAlertDeliveries";
+import { AddTypeToClusters1790000400000 } from "./migrations/1790000400000-AddTypeToClusters";
 import { AlertDeliveryEntity } from "../modules/alerting/alert-delivery.entity";
 
 export const AppDataSource = new DataSource({
@@ -37,6 +38,7 @@ export const AppDataSource = new DataSource({
     DropIncidentAcknowledgePostpone1790000100000,
     DropRelayDeliveries1790000200000,
     CreateAlertDeliveries1790000300000,
+    AddTypeToClusters1790000400000,
   ],
   synchronize: false,
   logging: false,

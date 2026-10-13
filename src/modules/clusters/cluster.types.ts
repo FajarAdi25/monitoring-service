@@ -1,5 +1,5 @@
 import type { ClusterEntity } from "./cluster.entity";
-import type { ClusterEnvironment } from "./cluster.enums";
+import type { ClusterEnvironment, ClusterType } from "./cluster.enums";
 
 export interface ClusterMetadata {
   clusterId: string;
@@ -10,7 +10,7 @@ export interface ClusterMetadata {
 }
 
 export interface ClusterRepositoryPort {
-  findActive(): Promise<ClusterEntity[]>;
+  findActive(type: ClusterType): Promise<ClusterEntity[]>;
   findSslMonitoringEnabled(): Promise<ClusterEntity[]>;
   findById(clusterId: string): Promise<ClusterEntity | null>;
   findMetadataById(clusterId: string): Promise<ClusterMetadata | null>;

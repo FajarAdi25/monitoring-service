@@ -1,4 +1,4 @@
-// Version: 2.7.0
+// Version: 2.10.0
 import "dotenv/config";
 
 function required(name: string, fallback?: string): string {
@@ -53,6 +53,15 @@ export const env = {
     requestTimeoutMs: Number(process.env.NOMAD_REQUEST_TIMEOUT_MS ?? 10000),
     tlsRejectUnauthorized: boolean("NOMAD_TLS_REJECT_UNAUTHORIZED", true),
     tlsCaFile: optional("NOMAD_TLS_CA_FILE"),
+  },
+  consul: {
+    enabled: boolean("CONSUL_ENABLED", true),
+    pullCron: required("CONSUL_PULL_CRON", "*/60 * * * * *"),
+    pullCronTimezone: required("CONSUL_PULL_CRON_TZ", "Asia/Jakarta"),
+    pullRunOnStart: boolean("CONSUL_PULL_RUN_ON_START", true),
+    requestTimeoutMs: Number(process.env.CONSUL_REQUEST_TIMEOUT_MS ?? 10000),
+    tlsRejectUnauthorized: boolean("CONSUL_TLS_REJECT_UNAUTHORIZED", true),
+    tlsCaFile: optional("CONSUL_TLS_CA_FILE"),
   },
   db: {
     host: required("DB_HOST", "127.0.0.1"),

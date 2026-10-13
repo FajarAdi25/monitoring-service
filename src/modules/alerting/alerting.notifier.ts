@@ -1,4 +1,4 @@
-// Version: 2.9.0
+// Version: 2.10.1
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
@@ -34,13 +34,15 @@ const LIMIT = {
   mapValue: 256,
 } as const;
 
-// REINTAKE entity.type enum only allows nomad_node among Nomad resources.
+// REINTAKE entity.type enum only allows nomad_node among Nomad resources and
+// consul_server among Consul resources; other Consul resources are sent as "other".
 const ENTITY_TYPE: Record<string, string> = {
   NODE: "nomad_node",
   DRIVER: "nomad_node",
   ALLOCATION: "other",
   EVALUATION: "other",
   CLUSTER_SSL_CERTIFICATE: "cluster",
+  CONSUL_SERVER: "consul_server",
 };
 
 function readServiceVersion(): string {
@@ -90,7 +92,7 @@ function stringMap(entries: Array<[string, unknown]>): Record<string, string> {
 
 function hostKey(incident: IncidentEntity): string {
   const context = asRecord(incident.contextJson);
-  const nodeName = incident.resourceType === "NODE"
+  const nodeName = ["NODE", "CONSUL_NODE", "CONSUL_SERVER"].includes(incident.resourceType)
     ? incident.resourceName
     : incident.resourceType === "DRIVER"
       ? contextString(context, "nodeName")
@@ -103,15 +105,32 @@ function entityIp(incident: IncidentEntity): string | null {
   const context = asRecord(incident.contextJson);
   if (incident.resourceType === "NODE") return contextString(context, "Address");
   if (incident.resourceType === "DRIVER") return contextString(context, "nodeAddress");
+  if (incident.resourceType === "CONSUL_SERVER") return withoutPort(contextString(context, "Address"));
   return null;
+}
+
+/** `10.0.0.1:8300` -> `10.0.0.1`, `[::1]:8300` -> `::1`. */
+function withoutPort(address: string | null): string | null {
+  if (!address) return null;
+  const match = /^\[?(.+?)\]?:\d+$/.exec(address);
+  return match ? match[1] : address;
+}
+
+function joined(values: unknown[]): string {
+  return values.filter(value => typeof value === "string" && value !== "").join(", ");
 }
 
 /**
  * `[<site>/<cluster>] <type> - <resource name>`.
  * ALLOCATION: `[<site>/<cluster>] ALLOCATION_FAILED - job <failed|degraded> - alloc fail <x> of <y> - <allocation> on <node>`.
+ * Consul: `[<site>/<cluster>] <type> - <cause> on <resource name>` (see consulCause).
  */
 function alertTitle(incident: IncidentEntity, cluster: ClusterMetadata): string {
   const prefix = `[${cluster.site}/${cluster.clusterName}] ${incident.type}`;
+  const cause = consulCause(incident);
+  if (cause) {
+    return `${prefix} - ${cause} on ${incident.resourceName ?? incident.resourceKey}`;
+  }
   if (incident.resourceType !== "ALLOCATION") {
     return `${prefix} - ${incident.resourceName ?? incident.resourceKey}`;
   }
@@ -132,6 +151,50 @@ function alertTitle(incident: IncidentEntity, cluster: ClusterMetadata): string 
   }
   if (nodeName) title += ` on ${nodeName}`;
   return title;
+}
+
+/** Check output on one line: Consul outputs are often multi-line. */
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Cause shown in the title of Consul incidents:
+ * - CONSUL_SERVICE: `<check name>: <check output>` of the first unhealthy
+ *   instance; `node <node> down` when the instance is unhealthy because its node is down.
+ * - CONSUL_NODE: names of the critical node checks.
+ * - CONSUL_SERVER: `serf <status>`, or `unhealthy` when serf is alive.
+ * - CONSUL_CLUSTER: `no leader`.
+ * Null for other resource types.
+ */
+function consulCause(incident: IncidentEntity): string | null {
+  const context = asRecord(incident.contextJson);
+  switch (incident.resourceType) {
+    case "CONSUL_SERVICE": {
+      const instances = Array.isArray(context.instances) ? context.instances.map(asRecord) : [];
+      const withCheck = instances.find(instance => Array.isArray(instance.checks) && instance.checks.length > 0);
+      if (withCheck) {
+        const check = asRecord((withCheck.checks as unknown[])[0]);
+        const name = contextString(check, "name") ?? contextString(check, "checkId") ?? "check";
+        const output = oneLine(contextString(check, "output") ?? "");
+        return output ? `${name}: ${output}` : name;
+      }
+      const node = instances.length > 0 ? contextString(instances[0], "node") : null;
+      return node ? `node ${node} down` : "unhealthy";
+    }
+    case "CONSUL_NODE": {
+      const checks = Array.isArray(context.checks) ? context.checks.map(asRecord) : [];
+      return joined(checks.map(check => check.name)) || "critical";
+    }
+    case "CONSUL_SERVER": {
+      const serf = contextString(context, "SerfStatus");
+      return serf && serf.toLowerCase() !== "alive" ? `serf ${serf}` : "unhealthy";
+    }
+    case "CONSUL_CLUSTER":
+      return "no leader";
+    default:
+      return null;
+  }
 }
 
 function contextEntries(incident: IncidentEntity): Array<[string, unknown]> {
@@ -187,6 +250,44 @@ function contextEntries(incident: IncidentEntity): Array<[string, unknown]> {
         ["issuer_cn", context.issuerCn],
         ["certificate_fingerprint256", context.certificateFingerprint256],
       ];
+    case "CONSUL_CLUSTER":
+      return [
+        ["datacenter", context.datacenter],
+        ["leader", context.leader],
+      ];
+    case "CONSUL_SERVER":
+      return [
+        ["datacenter", context.datacenter],
+        ["server_id", context.ID],
+        ["server_name", context.Name],
+        ["address", context.Address],
+        ["serf_status", context.SerfStatus],
+        ["leader", context.Leader],
+        ["voter", context.Voter],
+        ["last_contact", context.LastContact],
+        ["version", context.Version],
+      ];
+    case "CONSUL_NODE": {
+      const checks = Array.isArray(context.checks) ? context.checks.map(asRecord) : [];
+      return [
+        ["datacenter", context.datacenter],
+        ["node", context.node],
+        ["critical_checks", joined(checks.map(check => check.name))],
+        ["output", checks[0]?.output],
+      ];
+    }
+    case "CONSUL_SERVICE": {
+      const instances = Array.isArray(context.instances) ? context.instances.map(asRecord) : [];
+      return [
+        ["datacenter", context.datacenter],
+        ["service", context.service],
+        ["service_status", context.status],
+        ["unhealthy_instances", context.unhealthy],
+        ["total_instances", context.total],
+        ["unhealthy_service_ids", joined(instances.map(instance => instance.serviceId))],
+        ["unhealthy_nodes", joined(instances.map(instance => instance.node))],
+      ];
+    }
     default:
       return [];
   }
